@@ -61,7 +61,13 @@ export default function HistoryPanel({ open, onToggle, items, loading, onRestore
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate font-display text-sm font-bold ink">{r.company}</span>
-                      <span className="font-mono text-xs ink-faint" title={fullStamp(r.created_at)}>{fullStamp(r.created_at)} · {timeAgo(r.created_at)}</span>
+                      <span className="font-mono text-xs ink-faint" title={fullStamp(r.created_at)}>
+                        {(() => {
+                          const done = (r.blocks || []).filter((b) => b && b.blockData != null).length;
+                          const label = done >= 11 ? "Complete" : `${done}/11 · resume`;
+                          return <><span style={{ color: done >= 11 ? "var(--green)" : "var(--teal)" }}>{label}</span> · {timeAgo(r.created_at)}</>;
+                        })()}
+                      </span>
                     </span>
                   </button>
                   <div className="flex shrink-0 items-center gap-2">
@@ -81,5 +87,5 @@ export default function HistoryPanel({ open, onToggle, items, loading, onRestore
         )}
       </AnimatePresence>
     </div>
-  );
+   );
 }

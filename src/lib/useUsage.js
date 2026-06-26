@@ -1,40 +1,33 @@
 import { useState, useCallback, useEffect } from "react";
 
-// Tracks the user's daily report usage (used / limit). Reads from the backend
-// check-limit endpoint, which is the single source of truth. `refresh` fetches
-// current counts; `applyResult` updates from a check-limit response after a run.
+// Reads the user's daily search usage from the server (authoritative). The pill
+// in the header shows remaining searches. `refresh()` re-fetches; call it after
+// a new company search completes so the count updates live.
 export function useUsage(session, authed) {
-  const [usage, setUsage] = useState(null); // { used, limit } | null
-  const [loading, setLoading] = useState(false);
+  const [usage, setUsage] = useState(null); // { used, limit, remaining } | null
+  const [configured, setConfigured] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!authed || !session?.access_token) { setUsage(null); return; }
-    setLoading(true);
+    const token = session?.access_token;
+    if (!authed || !token) { setUsage(null); return; }
     try {
-      const resp = await fetch("/api/check-limit?peek=1", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      const resp = await fetch("/api/check-limit", {
+        headers: { Authorization: `Bearer ${token}` },
       });
+      if (!resp.ok) return;
       const data = await resp.json();
-      if (resp.ok && typeof data.used === "number") {
-        setUsage({ used: data.used, limit: data.limit });
-      }
+      setConfigured(Boolean(data.configured));
+      if (data.configured) setUsage({ used: data.used, limit: data.limit, remaining: data.remaining });
+      else setUsage(null);
     } catch {
-      /* leave usage as-is on network error */
-    } finally {
-      setLoading(false);
+      /* network error — leave previous state */
     }
-  }, [authed, session]);
+  }, [session, authed]);
 
-  // Fetch once when the user becomes authenticated.
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Apply a check-limit response (after a generation) directly.
-  const applyResult = useCallback((data) => {
-    if (data && typeof data.used === "number") setUsage({ used: data.used, limit: data.limit });
-  }, []);
+  const remaining = usage ? usage.remaining : null;
+  const limit = usage ? usage.limit : null;
 
-  const remaining = usage ? Math.max(0, usage.limit - usage.used) : null;
-
-  return { usage, remaining, loading, refresh, applyResult };
+  return { usage, remaining, limit, configured, refresh };
 }

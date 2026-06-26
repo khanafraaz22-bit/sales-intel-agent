@@ -14,7 +14,7 @@ export function useHistory(authed) {
     try {
       const { data, error } = await supabase
         .from("reports")
-        .select("id, company, blocks, created_at")
+        .select("id, company, blocks, brief, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
       if (!error && data) setItems(data);
@@ -25,9 +25,11 @@ export function useHistory(authed) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Save a finished report. If this company already exists for the user, update
-  // its blocks + timestamp (no duplicate). Otherwise insert a new row.
-  const save = useCallback(async (company, blocks) => {
+  // Save a report (partial or complete). If this company already exists for the
+  // user, update its blocks + brief + timestamp (no duplicate). Otherwise insert
+  // a new row. The brief is the searched research context — persisting it means
+  // resuming a partial report later costs NO new Brave search.
+  const save = useCallback(async (company, blocks, brief = null) => {
     if (!isSupabaseConfigured || !authed) return null;
     const { data: u } = await supabase.auth.getUser();
     const user = u?.user;
@@ -35,23 +37,27 @@ export function useHistory(authed) {
 
     const name = (company || "").trim();
     const now = new Date().toISOString();
+    const briefVal = (typeof brief === "string" && brief.trim()) ? brief.trim() : null;
 
     // Look for an existing entry for this company (case-insensitive).
     const { data: existing } = await supabase
       .from("reports")
-      .select("id")
+      .select("id, brief")
       .eq("user_id", user.id)
       .ilike("company", name)
       .limit(1);
 
     if (existing && existing.length) {
-      // Update the existing row: refresh blocks + timestamp.
+      // Update the existing row: refresh blocks + timestamp. Keep an existing
+      // brief if we don't have a new one to write (don't overwrite with null).
       const id = existing[0].id;
+      const patch = { blocks, created_at: now };
+      if (briefVal) patch.brief = briefVal;
       const { data, error } = await supabase
         .from("reports")
-        .update({ blocks, created_at: now })
+        .update(patch)
         .eq("id", id)
-        .select("id, company, blocks, created_at")
+        .select("id, company, blocks, brief, created_at")
         .single();
       if (error || !data) return null;
       // Move it to the top of the local list.
@@ -62,8 +68,8 @@ export function useHistory(authed) {
     // No existing entry — insert new.
     const { data, error } = await supabase
       .from("reports")
-      .insert({ user_id: user.id, company: name, blocks })
-      .select("id, company, blocks, created_at")
+      .insert({ user_id: user.id, company: name, blocks, brief: briefVal })
+      .select("id, company, blocks, brief, created_at")
       .single();
     if (error || !data) return null;
     setItems((prev) => [data, ...prev]);

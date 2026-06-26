@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 
-export default function AccountSettings({ auth, onClose }) {
+export default function AccountSettings({ auth, groq, onClose }) {
   const [username, setUsername] = useState(auth.username || "");
   const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -10,7 +10,25 @@ export default function AccountSettings({ auth, onClose }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
 
+  // Groq key management (browser-side, per device).
+  const [keyInput, setKeyInput] = useState("");
+  const hasKey = Boolean(groq?.hasKey);
+
   const flash = (type, text) => setMsg({ type, text });
+
+  const saveGroqKey = () => {
+    const v = keyInput.trim();
+    if (v.length < 20) { flash("error", "That doesn't look like a valid Groq key (should start with gsk_)."); return; }
+    groq.setGroqKey(v);
+    setKeyInput("");
+    flash("success", "Groq key saved on this device.");
+  };
+
+  const removeGroqKey = () => {
+    groq.clearGroqKey();
+    setKeyInput("");
+    flash("success", "Groq key removed from this device.");
+  };
 
   const saveUsername = async () => {
     if (!username.trim() || username.trim().length < 2) { flash("error", "Username must be at least 2 characters."); return; }
@@ -85,6 +103,37 @@ export default function AccountSettings({ auth, onClose }) {
               className="font-mono rounded-lg px-4 text-xs font-semibold uppercase tracking-wide disabled:opacity-50"
               style={{ background: "var(--teal)", color: "var(--bg)" }}>Change</button>
           </div>
+        </div>
+
+        {/* Groq API key (browser-side, per device) */}
+        <div className="mt-4">
+          <label className="eyebrow">Groq API Key</label>
+          <div className="mt-1 flex items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm"
+              style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: hasKey ? "var(--green)" : "var(--red)" }} />
+              <span className="ink-soft">{hasKey ? "Key saved on this device" : "No key on this device"}</span>
+            </div>
+            {hasKey && (
+              <button onClick={removeGroqKey} disabled={busy}
+                className="font-mono rounded-lg border px-4 py-2.5 text-xs uppercase tracking-wide transition disabled:opacity-50"
+                style={{ borderColor: "var(--red)", color: "var(--red)" }}>Remove</button>
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveGroqKey()}
+              placeholder={hasKey ? "Paste a new key to replace it" : "gsk_..."}
+              className="flex-1 rounded-lg border bg-transparent px-3 py-2.5 text-sm outline-none ink"
+              style={{ borderColor: "var(--border)", background: "var(--surface-2)" }} />
+            <button onClick={saveGroqKey} disabled={busy || !keyInput}
+              className="font-mono rounded-lg px-4 text-xs font-semibold uppercase tracking-wide disabled:opacity-50"
+              style={{ background: "var(--teal)", color: "var(--bg)" }}>{hasKey ? "Update" : "Save"}</button>
+          </div>
+          <p className="mt-1.5 text-xs ink-faint">
+            Stored only in this browser, never on our servers. Get a free key at{" "}
+            <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--teal)" }}>console.groq.com/keys</a>.
+          </p>
         </div>
 
         {/* Danger zone */}

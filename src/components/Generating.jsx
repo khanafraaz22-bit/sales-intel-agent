@@ -6,8 +6,17 @@ const STEP_NAMES = [
   "Solution Stack", "Buyer Personas", "Strategy Roadmap",
 ];
 
-export default function Generating({ company, doneCount, current, cooldown, error, onRetry }) {
+// Manual step-by-step generation view.
+// Props:
+//   company, doneCount, usableCount, lastFailed, current, error
+//   running  — a section is currently streaming
+//   onNext   — generate the next section (or retry current on error/waiting)
+//   onFinish — stop here and view the report with the sections done so far
+export default function Generating({ company, doneCount, usableCount = doneCount, lastFailed = false, current, error, running, onNext, onFinish }) {
   const pct = Math.round((doneCount / 11) * 100);
+  const allDone = doneCount >= 11;
+  const nextName = STEP_NAMES[doneCount];
+
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-4 text-center">
       <div className="eyebrow" style={{ color: "var(--teal)" }}>Building Intelligence Profile</div>
@@ -30,15 +39,21 @@ export default function Generating({ company, doneCount, current, cooldown, erro
         </div>
       </div>
 
-      {/* current step */}
+      {/* status line */}
       <div className="mt-6 h-5">
-        {cooldown > 0 ? (
-          <span className="font-mono text-sm ink-soft">Cooling down {cooldown}s…</span>
-        ) : (
+        {running ? (
           <span className="flex items-center justify-center gap-2 text-sm ink-soft">
             <motion.span animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 1.1 }}
               className="h-2 w-2 rounded-full" style={{ background: "var(--teal)" }} />
-            {error ? "Paused" : STEP_NAMES[doneCount] || "Finishing…"}
+            {current?.searching ? "Searching the web…" : `Generating ${nextName || "section"}…`}
+          </span>
+        ) : error ? (
+          <span className="font-mono text-sm" style={{ color: "var(--red)" }}>Paused</span>
+        ) : allDone ? (
+          <span className="font-mono text-sm" style={{ color: "var(--teal)" }}>All sections complete</span>
+        ) : (
+          <span className="font-mono text-sm ink-soft">
+            {doneCount === 0 ? "Ready to begin" : `${doneCount} of 11 done — ready for next`}
           </span>
         )}
       </div>
@@ -58,7 +73,7 @@ export default function Generating({ company, doneCount, current, cooldown, erro
                 {state === "done" ? "✓" : String(i + 1).padStart(2, "0")}
               </span>
               <span className={state === "done" ? "ink" : "ink-soft"}>{name}</span>
-              {state === "active" && !error && (
+              {state === "active" && running && !error && (
                 <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }}
                   className="ml-auto font-mono text-[10px]" style={{ color: "var(--teal)" }}>running</motion.span>
               )}
@@ -70,11 +85,43 @@ export default function Generating({ company, doneCount, current, cooldown, erro
       {error && (
         <div className="mt-6 w-full rounded-lg p-4 text-sm" style={{ background: "var(--red-soft)", color: "var(--red)" }}>
           {error}
-          {onRetry && (
-            <button onClick={onRetry} className="ml-3 font-mono text-xs underline">Retry</button>
-          )}
         </div>
       )}
+
+      {/* If the last section came back unusable, say so plainly. */}
+      {!error && lastFailed && !running && (
+        <div className="mt-6 w-full rounded-lg p-4 text-sm" style={{ background: "var(--amber-soft)", color: "var(--amber)" }}>
+          The last section didn't generate cleanly. Click Generate to retry it before continuing.
+        </div>
+      )}
+
+      {/* manual controls */}
+      <div className="mt-8 flex w-full flex-col items-center gap-3">
+        {!allDone && (
+          <motion.button
+            whileHover={{ scale: running ? 1 : 1.03 }} whileTap={{ scale: running ? 1 : 0.97 }}
+            onClick={onNext} disabled={running}
+            className="font-mono w-full rounded-lg py-3 text-sm font-semibold uppercase tracking-wide disabled:opacity-50"
+            style={{ background: "var(--teal)", color: "var(--bg)" }}>
+            {running
+              ? "Working…"
+              : (error || lastFailed)
+              ? `Retry ${nextName || "section"}`
+              : doneCount === 0
+              ? "Generate first section"
+              : `Generate next section · ${nextName || ""}`}
+          </motion.button>
+        )}
+
+        {/* Finish early — only when at least one USABLE section exists */}
+        {usableCount > 0 && (
+          <button onClick={onFinish} disabled={running}
+            className="font-mono rounded-lg border px-5 py-2.5 text-xs uppercase tracking-wide ink-soft transition hover:border-teal hover:text-teal disabled:opacity-40"
+            style={{ borderColor: "var(--border)" }}>
+            {allDone ? "View full report" : `View report so far (${usableCount}/11)`}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

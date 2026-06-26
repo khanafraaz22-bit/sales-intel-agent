@@ -41,7 +41,20 @@ function extractPercents(bullets = []) {
   return out;
 }
 
-export default function Dashboard({ blocks, company, onReset }) {
+export default function Dashboard({
+  blocks, company, onReset,
+  // Live-build props (optional — when present, the report shows progress + a
+  // bottom control bar so it can be generated section-by-section in place):
+  building = false,        // true while the run isn't finished
+  running = false,         // true while a section is actively generating
+  doneCount = 0,
+  usableCount = 0,
+  totalSteps = 11,
+  nextStepName = null,
+  error = null,
+  lastFailed = false,
+  onNext = null,           // generate the next section
+}) {
   const hero = find(blocks, "HERO");
   const metrics = find(blocks, "METRICS");
   const cardGrids = findAll(blocks, "CARD_GRID"); // [business, operations, tech]
@@ -53,22 +66,84 @@ export default function Dashboard({ blocks, company, onReset }) {
   const personas = find(blocks, "PERSONAS");
   const roadmap = find(blocks, "ROADMAP");
 
+  // A report is empty if NO block produced usable data (e.g. only failed-parse
+  // placeholders, which have blockData: null). Without this guard the page
+  // would render just a footer and look broken.
+  const hasAnyData = [hero, metrics, business, operations, tech, pains, table, insights, solutions, personas, roadmap]
+    .some((d) => d != null);
+
+  if (!hasAnyData) {
+    return (
+      <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center px-4 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: "var(--surface-2)", color: "var(--amber)" }}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </div>
+        <h1 className="font-display mt-4 text-2xl font-bold ink">No sections generated yet</h1>
+        <p className="text-body mt-2 max-w-sm text-sm ink-soft">
+          {company ? <>The analysis for <span className="ink">{company}</span> didn't produce any usable sections.</> : "This report has no usable sections."}{" "}
+          This usually means the section failed to generate cleanly. Start a new analysis and try again.
+        </p>
+        <button onClick={onReset}
+          className="font-mono mt-6 rounded-lg px-6 py-3 text-xs font-semibold uppercase tracking-wide"
+          style={{ background: "var(--teal)", color: "var(--bg)" }}>
+          + New Analysis
+        </button>
+      </div>
+    );
+  }
+
+  // If HERO failed but other sections exist, synthesize a minimal header so the
+  // report still has a title block instead of starting mid-page.
+  const heroFallback = hero || {
+    company_name: company || "Company",
+    industry: null, region: null, growth_stage: null,
+    key_insight: null, sales_angle: null, key_locations: [],
+  };
+
   return (
     <div className="relative mx-auto max-w-6xl space-y-20 px-4 py-10 sm:px-6">
-      {/* ─── OVERVIEW / HERO ─── */}
-      {hero && (
-        <motion.section variants={reveal} initial="hidden" animate="show">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill color="var(--cyan)" soft="var(--surface-2)">{hero.industry}</Pill>
-            <Pill color="var(--teal)" soft="var(--surface-2)">{hero.region}</Pill>
-            <Pill color="var(--green)" soft="var(--green-soft)">● {hero.growth_stage}</Pill>
+      {/* ─── LIVE-BUILD PROGRESS (top) ─── */}
+      {building && (
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          className="!mt-0 flex items-center justify-center gap-3">
+          <div className="flex items-center gap-2.5 rounded-full border px-4 py-1.5"
+            style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--surface) 70%, transparent)", backdropFilter: "blur(8px)" }}>
+            {running ? (
+              <motion.span animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 1.1 }}
+                className="h-2 w-2 rounded-full" style={{ background: "var(--teal)" }} />
+            ) : (
+              <span className="h-2 w-2 rounded-full" style={{ background: error ? "var(--red)" : "var(--teal)" }} />
+            )}
+            <span className="font-mono text-xs ink-soft">
+              {running ? `Generating ${nextStepName || "section"}…` : `${usableCount} of ${totalSteps} sections`}
+            </span>
+            {/* mini progress track */}
+            <span className="ml-1 h-1 w-20 overflow-hidden rounded-full" style={{ background: "var(--surface-2)" }}>
+              <motion.span className="block h-full rounded-full" style={{ background: "var(--teal)" }}
+                animate={{ width: `${Math.round((usableCount / totalSteps) * 100)}%` }} transition={{ duration: 0.5 }} />
+            </span>
           </div>
+        </motion.div>
+      )}
+
+      {/* ─── OVERVIEW / HERO ─── */}
+      {(
+        <motion.section variants={reveal} initial="hidden" animate="show">
+          {(heroFallback.industry || heroFallback.region || heroFallback.growth_stage) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {heroFallback.industry && <Pill color="var(--cyan)" soft="var(--surface-2)">{heroFallback.industry}</Pill>}
+              {heroFallback.region && <Pill color="var(--teal)" soft="var(--surface-2)">{heroFallback.region}</Pill>}
+              {heroFallback.growth_stage && <Pill color="var(--green)" soft="var(--green-soft)">● {heroFallback.growth_stage}</Pill>}
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-4">
-            <CompanyLogo name={company || hero.company_name} size={72} />
-            <h1 className="font-display text-5xl font-bold ink sm:text-6xl">{hero.company_name}</h1>
+            <CompanyLogo name={company || heroFallback.company_name} size={72} />
+            <h1 className="font-display text-5xl font-bold ink sm:text-6xl">{heroFallback.company_name}</h1>
             <motion.button
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              onClick={() => { generatePDF(blocks, company || hero.company_name).catch((e) => console.error("PDF generation failed:", e)); }}
+              onClick={() => { generatePDF(blocks, company || heroFallback.company_name).catch((e) => console.error("PDF generation failed:", e)); }}
               className="font-mono ml-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold uppercase tracking-wide"
               style={{ background: "var(--teal)", color: "var(--bg)" }}
             >
@@ -78,7 +153,7 @@ export default function Dashboard({ blocks, company, onReset }) {
               Download Report
             </motion.button>
           </div>
-          <p className="mt-4 max-w-2xl text-[0.95rem] leading-relaxed ink-soft">{hero.key_insight}</p>
+          {heroFallback.key_insight && <p className="mt-4 max-w-2xl text-[0.95rem] leading-relaxed ink-soft">{heroFallback.key_insight}</p>}
 
           {/* Metric cards */}
           {metrics?.items && (
@@ -97,20 +172,26 @@ export default function Dashboard({ blocks, company, onReset }) {
             </motion.div>
           )}
 
-          {/* Summary + sales angle + world map */}
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <div className="card p-6 lg:col-span-2">
-              <div className="eyebrow" style={{ color: "var(--teal)" }}>Strategic Summary</div>
-              <p className="mt-3 text-sm leading-relaxed ink-soft">{hero.key_insight}</p>
-              <div className="mt-4 rounded-xl p-4" style={{ background: "var(--surface-2)" }}>
-                <div className="eyebrow" style={{ color: "var(--green)" }}>Sales Angle</div>
-                <p className="mt-2 text-sm ink">{hero.sales_angle}</p>
+          {/* Summary + sales angle + world map — only when HERO actually produced content */}
+          {(heroFallback.key_insight || heroFallback.sales_angle || (heroFallback.key_locations || []).length > 0) && (
+            <div className="mt-6 grid gap-4 lg:grid-cols-3">
+              <div className="card p-6 lg:col-span-2">
+                <div className="eyebrow" style={{ color: "var(--teal)" }}>Strategic Summary</div>
+                {heroFallback.key_insight && <p className="mt-3 text-sm leading-relaxed ink-soft">{heroFallback.key_insight}</p>}
+                {heroFallback.sales_angle && (
+                  <div className="mt-4 rounded-xl p-4" style={{ background: "var(--surface-2)" }}>
+                    <div className="eyebrow" style={{ color: "var(--green)" }}>Sales Angle</div>
+                    <p className="mt-2 text-sm ink">{heroFallback.sales_angle}</p>
+                  </div>
+                )}
               </div>
+              {(heroFallback.key_locations || []).length > 0 && (
+                <div className="card overflow-hidden p-1">
+                  <WorldMap locations={heroFallback.key_locations} />
+                </div>
+              )}
             </div>
-            <div className="card overflow-hidden p-1">
-              <WorldMap locations={hero.key_locations} />
-            </div>
-          </div>
+          )}
         </motion.section>
       )}
 
@@ -350,6 +431,48 @@ export default function Dashboard({ blocks, company, onReset }) {
             })}
           </div>
         </Section>
+      )}
+
+      {/* ─── LIVE-BUILD CONTROLS (bottom) ─── */}
+      {building && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center gap-4">
+          {error && (
+            <div className="w-full max-w-lg rounded-lg p-4 text-center text-sm" style={{ background: "var(--red-soft)", color: "var(--red)" }}>
+              {error}
+            </div>
+          )}
+          {!error && lastFailed && (
+            <div className="w-full max-w-lg rounded-lg p-4 text-center text-sm" style={{ background: "var(--amber-soft)", color: "var(--amber)" }}>
+              The last section didn't generate cleanly. Click Generate to retry it.
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <motion.button
+              whileHover={{ scale: running ? 1 : 1.04 }} whileTap={{ scale: running ? 1 : 0.96 }}
+              onClick={onNext} disabled={running || !onNext}
+              className="font-mono rounded-lg px-8 py-3.5 text-sm font-semibold uppercase tracking-wide disabled:opacity-50"
+              style={{ background: "var(--teal)", color: "var(--bg)" }}>
+              {running
+                ? "Working…"
+                : (error || lastFailed)
+                ? `Retry ${nextStepName || "section"}`
+                : `Generate next section${nextStepName ? ` · ${nextStepName}` : ""}`}
+            </motion.button>
+            {usableCount > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                onClick={() => { generatePDF(blocks, company || heroFallback.company_name).catch((e) => console.error("PDF generation failed:", e)); }}
+                className="font-mono flex items-center gap-2 rounded-lg border px-6 py-3.5 text-sm font-semibold uppercase tracking-wide ink-soft transition hover:border-teal hover:text-teal"
+                style={{ borderColor: "var(--border)" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Download ({usableCount}/{totalSteps})
+              </motion.button>
+            )}
+          </div>
+        </motion.div>
       )}
 
       {/* footer */}

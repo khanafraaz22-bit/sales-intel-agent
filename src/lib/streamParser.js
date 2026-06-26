@@ -12,21 +12,30 @@
 // Sentinels written by the backend (see api/agent.js)
 export const SEARCH_SENTINEL = "\u0000SEARCH\u0000";
 export const ERROR_SENTINEL = "\u0000ERROR\u0000";
+export const BRIEF_SENTINEL = "\u0000BRIEF\u0000";
 
 export function stripSentinels(buffer) {
   let searching = false;
   let error = null;
+  let brief = null;
 
   if (buffer.includes(SEARCH_SENTINEL)) {
     searching = true;
     buffer = buffer.split(SEARCH_SENTINEL).join("");
+  }
+  // The BRIEF sentinel carries the section-1 research brief as a trailing
+  // payload; extract it and remove it from the parseable buffer.
+  const briefIdx = buffer.indexOf(BRIEF_SENTINEL);
+  if (briefIdx !== -1) {
+    brief = buffer.slice(briefIdx + BRIEF_SENTINEL.length).trim();
+    buffer = buffer.slice(0, briefIdx);
   }
   const errIdx = buffer.indexOf(ERROR_SENTINEL);
   if (errIdx !== -1) {
     error = buffer.slice(errIdx + ERROR_SENTINEL.length).trim();
     buffer = buffer.slice(0, errIdx);
   }
-  return { buffer, searching, error };
+  return { buffer, searching, error, brief };
 }
 
 function extractField(buffer, label) {
@@ -38,10 +47,19 @@ function extractField(buffer, label) {
 // Pull the JSON object that follows "BLOCK_DATA:" — balanced-brace scan so we
 // stop at the matching close brace even before STATUS has streamed in.
 function extractBlockData(buffer) {
-  const marker = buffer.search(/BLOCK_DATA:/i);
-  if (marker === -1) return { raw: null, json: null };
+  let marker = buffer.search(/BLOCK_DATA:/i);
+  let after;
+  if (marker !== -1) {
+    after = buffer.slice(marker + "BLOCK_DATA:".length);
+  } else {
+    // FALLBACK: some models (e.g. groq/compound) omit the literal BLOCK_DATA:
+    // marker. Recover by scanning for JSON after the BLOCK_TYPE line, or — as a
+    // last resort — anywhere in the buffer. This keeps parsing resilient to
+    // looser formatting instead of failing the whole section.
+    const typeIdx = buffer.search(/BLOCK_TYPE:/i);
+    after = typeIdx !== -1 ? buffer.slice(typeIdx) : buffer;
+  }
 
-  const after = buffer.slice(marker + "BLOCK_DATA:".length);
   const start = after.indexOf("{");
   const startArr = after.indexOf("[");
   let openChar = "{";
@@ -84,16 +102,18 @@ function extractBlockData(buffer) {
   const raw = after.slice(firstIdx, end + 1);
 
   // Try strict parse first, then a lenient pass that repairs the most common
-  // LLM JSON mistakes (trailing commas, smart quotes, stray code fences).
+  // LLM JSON mistakes (trailing commas, smart quotes, stray code fences, and
+  // raw newlines/tabs inside string values — common with groq/compound).
   try {
     return { raw, json: JSON.parse(raw) };
   } catch {
     try {
-      const repaired = raw
+      let repaired = raw
         .replace(/```json|```/gi, "")           // stray code fences
         .replace(/[\u201C\u201D]/g, '"')         // smart double quotes
         .replace(/[\u2018\u2019]/g, "'")         // smart single quotes
         .replace(/,\s*([}\]])/g, "$1");          // trailing commas before } or ]
+      repaired = escapeRawControlCharsInStrings(repaired);
       return { raw, json: JSON.parse(repaired) };
     } catch {
       return { raw, json: null };
@@ -101,9 +121,33 @@ function extractBlockData(buffer) {
   }
 }
 
+// Escape literal newlines / carriage returns / tabs that appear INSIDE JSON
+// string values (which is invalid JSON). Models like groq/compound sometimes
+// emit multi-line bullet text without escaping it, breaking JSON.parse. We walk
+// the text tracking whether we're inside a string, and escape control chars
+// only there — structural whitespace between tokens is left untouched.
+function escapeRawControlCharsInStrings(s) {
+  let out = "";
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { out += ch; escape = false; continue; }
+    if (ch === "\\") { out += ch; escape = true; continue; }
+    if (ch === '"') { inString = !inString; out += ch; continue; }
+    if (inString) {
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { out += "\\r"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
 // Returns a structured snapshot of whatever is parseable so far.
 export function parseStep(buffer) {
-  const { buffer: clean, searching, error } = stripSentinels(buffer);
+  const { buffer: clean, searching, error, brief } = stripSentinels(buffer);
 
   const stepNumber = extractField(clean, "STEP_NUMBER");
   const stepTitle = extractField(clean, "STEP_TITLE");
@@ -122,6 +166,7 @@ export function parseStep(buffer) {
   return {
     searching,
     error,
+    brief, // section-1 research brief (null otherwise)
     stepNumber: stepNumber ? parseInt(stepNumber, 10) : null,
     stepTitle,
     thought,
