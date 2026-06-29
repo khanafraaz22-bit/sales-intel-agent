@@ -36,7 +36,7 @@ export default function App() {
 
   const {
     blocks, current, phase, error,
-    doneCount, usableCount, lastFailed, nextStepName, stepNames, totalSteps,
+    doneCount, usableCount, lastFailed, nextStepName, stepNames, allSections, totalSteps, effectiveTotal,
     start, next, runStep, finishHere, reset, restore, getBrief,
   } = useAgent({ getGroqKey, getToken });
   const [company, setCompany] = useState("");
@@ -181,6 +181,7 @@ export default function App() {
               <motion.div key="landing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -20 }}>
                 <div className="relative">
                   <Landing onStart={handleStart} disabled={generating || needsAuth} lockInteractive={needsAuth}
+                    allSections={allSections}
                     greetingName={auth.authed ? `${isFirstVisit ? "Welcome" : "Welcome back"}, ${auth.firstName}` : null} />
                   {needsAuth && (
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[clamp(280px,42vh,460px)] flex items-start justify-center">
@@ -233,7 +234,7 @@ export default function App() {
                   error={error}
                   running={running}
                   stepNames={stepNames}
-                  totalSteps={totalSteps}
+                  totalSteps={effectiveTotal}
                   onNext={next}
                   onFinish={finishHere}
                 />
@@ -250,7 +251,7 @@ export default function App() {
                   running={running}
                   doneCount={doneCount}
                   usableCount={usableCount}
-                  totalSteps={totalSteps}
+                  totalSteps={effectiveTotal}
                   nextStepName={nextStepName}
                   error={error}
                   lastFailed={lastFailed}

@@ -13,13 +13,31 @@ const FEATURES = [
 ];
 const TITLE = ["Strategic", "Intelligence", "Hub"];
 
-export default function Landing({ onStart, disabled, lockInteractive = false, greetingName = null }) {
+export default function Landing({ onStart, disabled, lockInteractive = false, greetingName = null, allSections = [] }) {
   const [company, setCompany] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
+  // null = all sections; otherwise a Set of selected section numbers.
+  const [selected, setSelected] = useState(null);
 
-  const canStart = company.trim();
+  const allNums = allSections.map((s) => s.n);
+  const isAll = selected === null || selected.size === allNums.length;
+  const selectedCount = isAll ? allSections.length : selected.size;
+
+  const toggleSection = (n) => {
+    setSelected((prev) => {
+      const base = prev === null ? new Set(allNums) : new Set(prev);
+      if (base.has(n)) base.delete(n); else base.add(n);
+      return base.size === allNums.length ? null : base;
+    });
+  };
+  const selectAll = () => setSelected(null);
+  const selectNone = () => setSelected(new Set());
+
+  const canStart = company.trim() && (isAll || selected.size > 0);
   const run = () => {
     if (!canStart || disabled) return;
-    onStart({ company: company.trim(), industry: "Unknown", region: "Global", autoAdvance: true });
+    const selectedSteps = isAll ? undefined : [...selected].sort((a, b) => a - b);
+    onStart({ company: company.trim(), industry: "Unknown", region: "Global", selectedSteps });
   };
   const pick = (t) => setCompany(t.company);
 
@@ -87,6 +105,55 @@ export default function Landing({ onStart, disabled, lockInteractive = false, gr
           </button>
         ))}
       </motion.div>
+
+      {/* ─── Section picker ─── */}
+      {allSections.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }}
+          className="mx-auto mt-5 max-w-xl">
+          <button onClick={() => setShowPicker((v) => !v)}
+            className="font-mono mx-auto flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs uppercase tracking-wide ink-soft transition hover:border-teal hover:text-teal"
+            style={{ borderColor: "var(--border)" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: showPicker ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+            {isAll ? "All 13 sections" : `${selectedCount} section${selectedCount === 1 ? "" : "s"} selected`}
+          </button>
+
+          {showPicker && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+              className="mt-3 overflow-hidden rounded-2xl border p-4 text-left"
+              style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--surface) 70%, transparent)" }}>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="eyebrow">Choose sections to generate</span>
+                <div className="flex gap-2">
+                  <button onClick={selectAll} className="font-mono text-[11px] uppercase tracking-wide hover:text-teal" style={{ color: isAll ? "var(--teal)" : "var(--ink-faint)" }}>All</button>
+                  <span className="ink-faint">·</span>
+                  <button onClick={selectNone} className="font-mono text-[11px] uppercase tracking-wide hover:text-teal ink-faint">None</button>
+                </div>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {allSections.map((s) => {
+                  const on = isAll || selected.has(s.n);
+                  return (
+                    <button key={s.n} onClick={() => toggleSection(s.n)}
+                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-[var(--surface-2)]">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                        style={{ borderColor: on ? "var(--teal)" : "var(--border)", background: on ? "var(--teal)" : "transparent" }}>
+                        {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                      </span>
+                      <span className="ink-soft"><span className="font-mono text-xs ink-faint">{String(s.n).padStart(2, "0")}</span> {s.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {!isAll && selected.size === 0 && (
+                <p className="mt-3 text-center text-xs" style={{ color: "var(--red)" }}>Select at least one section.</p>
+              )}
+            </motion.div>
+          )}
+        </motion.div>
+      )}
 
       <motion.div initial="hidden" whileInView="show" viewport={{ once: true, margin: "-60px" }}
         variants={{ show: { transition: { staggerChildren: 0.12 } } }}

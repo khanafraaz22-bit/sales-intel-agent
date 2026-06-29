@@ -62,6 +62,14 @@ export default function Dashboard({
   const openModal = (payload) => setModal(payload);
   const closeModal = () => setModal(null);
 
+  // Jump-to-section dropdown state.
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const jumpTo = (id) => {
+    setJumpOpen(false);
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const hero = find(blocks, "HERO");
   const metrics = find(blocks, "METRICS");
   const metricsTitle = blocks.find((b) => b.blockType === "METRICS")?.stepTitle || "Financial Signals";
@@ -118,8 +126,46 @@ export default function Dashboard({
     key_insight: null, sales_angle: null, key_locations: [],
   };
 
+  // Ordered list of sections that actually rendered, for the jump menu.
+  const jumpItems = [];
+  if (hero) jumpItems.push({ id: "sec-1", n: 1, title: blocks.find((b) => b.blockType === "HERO")?.stepTitle || "Executive Summary" });
+  if (metrics?.items) jumpItems.push({ id: "sec-2", n: 2, title: metricsTitle });
+  cardSections.forEach((sec, si) => jumpItems.push({ id: `sec-${si + 3}`, n: si + 3, title: sec.title }));
+  if (decisionMakers) jumpItems.push({ id: "sec-11", n: 11, title: decisionMakersTitle });
+  if (personas?.personas) jumpItems.push({ id: "sec-11b", n: 11, title: personasTitle });
+  if (pains?.points || table?.rows) jumpItems.push({ id: "sec-12", n: 12, title: painsTitle });
+  if (roadmap?.phases) jumpItems.push({ id: "sec-13", n: 13, title: roadmapTitle });
+
   return (
     <div className="relative mx-auto max-w-6xl space-y-20 px-4 py-10 sm:px-6">
+      {/* ─── Jump-to-section menu (floating) ─── */}
+      {jumpItems.length > 1 && (
+        <div className="fixed bottom-6 right-6 z-40 !mt-0">
+          {jumpOpen && (
+            <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              className="absolute bottom-14 right-0 max-h-[60vh] w-64 overflow-y-auto rounded-2xl border p-2 shadow-xl"
+              style={{ borderColor: "var(--border)", background: "var(--surface)", backdropFilter: "blur(12px)" }}>
+              <div className="eyebrow px-2 py-1.5">Jump to section</div>
+              {jumpItems.map((it) => (
+                <button key={it.id} onClick={() => jumpTo(it.id)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ink-soft transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]">
+                  <span className="font-mono text-xs ink-faint">{String(it.n).padStart(2, "0")}</span>
+                  <span className="truncate">{it.title}</span>
+                </button>
+              ))}
+            </motion.div>
+          )}
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            onClick={() => setJumpOpen((v) => !v)}
+            className="flex h-12 w-12 items-center justify-center rounded-full shadow-lg"
+            style={{ background: "var(--teal)", color: "var(--bg)" }}
+            title="Jump to section">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {jumpOpen ? <path d="M18 6 6 18M6 6l12 12" /> : <><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h18" /></>}
+            </svg>
+          </motion.button>
+        </div>
+      )}
       {/* ─── LIVE-BUILD PROGRESS (top) ─── */}
       {building && (
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
@@ -146,7 +192,7 @@ export default function Dashboard({
 
       {/* ─── OVERVIEW / HERO ─── */}
       {(
-        <motion.section variants={reveal} initial="hidden" animate="show">
+        <motion.section id="sec-1" variants={reveal} initial="hidden" animate="show">
           {(heroFallback.industry || heroFallback.region || heroFallback.growth_stage) && (
             <div className="flex flex-wrap items-center gap-2">
               {heroFallback.industry && <Pill color="var(--cyan)" soft="var(--surface-2)">{heroFallback.industry}</Pill>}
@@ -196,7 +242,7 @@ export default function Dashboard({
 
       {/* ─── FINANCIAL HEALTH / METRICS ─── */}
       {metrics?.items && (
-        <Section eyebrow={`02 · ${metricsTitle}`} title={metricsTitle} accent="var(--green)">
+        <Section id="sec-2" eyebrow={`02 · ${metricsTitle}`} title={metricsTitle} accent="var(--green)">
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {metrics.items.map((m, i) => {
@@ -230,7 +276,7 @@ export default function Dashboard({
         const pctCard = (sec.data.cards || []).find((c) => extractPercents(c.bullets).length >= 2);
         const segs = pctCard ? extractPercents(pctCard.bullets) : null;
         return (
-          <Section key={si} eyebrow={`${String(si + 1).padStart(2, "0")} · ${sec.title}`} title={sec.title} accent={accent}>
+          <Section key={si} id={`sec-${si + 3}`} eyebrow={`${String(si + 3).padStart(2, "0")} · ${sec.title}`} title={sec.title} accent={accent}>
             {segs && (
               <div className="card mb-4 p-5">
                 <div className="eyebrow mb-3" style={{ color: accent }}>{pctCard.title}</div>
@@ -275,7 +321,7 @@ export default function Dashboard({
 
       {/* ─── DECISION-MAKERS (real LinkedIn profiles) ─── */}
       {decisionMakers && (
-        <Section eyebrow={`11 · ${decisionMakersTitle}`} title={decisionMakersTitle} accent="var(--purple)">
+        <Section id="sec-11" eyebrow={`11 · ${decisionMakersTitle}`} title={decisionMakersTitle} accent="var(--purple)">
           {(decisionMakers.people || []).length > 0 ? (
             <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
               className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -316,7 +362,7 @@ export default function Dashboard({
 
       {/* ─── PERSONAS ─── */}
       {personas?.personas && (
-        <Section eyebrow={`11 · ${personasTitle}`} title={personasTitle} accent="var(--purple)">
+        <Section id="sec-11b" eyebrow={`11 · ${personasTitle}`} title={personasTitle} accent="var(--purple)">
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {personas.personas.map((p, i) => {
@@ -350,7 +396,7 @@ export default function Dashboard({
 
       {/* ─── OPPORTUNITY: pains + table ─── */}
       {(pains?.points || table?.rows) && (
-        <Section eyebrow={`12 · ${painsTitle}`} title={painsTitle} accent="var(--red)">
+        <Section id="sec-12" eyebrow={`12 · ${painsTitle}`} title={painsTitle} accent="var(--red)">
           <div className="grid gap-4 lg:grid-cols-5">
             {/* pains */}
             {pains?.points && (
@@ -454,7 +500,7 @@ export default function Dashboard({
 
       {/* ─── ROADMAP ─── */}
       {roadmap?.phases && (
-        <Section eyebrow={`13 · ${roadmapTitle}`} title={roadmapTitle} accent="var(--green)">
+        <Section id="sec-13" eyebrow={`13 · ${roadmapTitle}`} title={roadmapTitle} accent="var(--green)">
           <div className="relative grid gap-4 md:grid-cols-3">
             {/* connecting line */}
             <div className="absolute left-0 right-0 top-5 hidden h-px md:block" style={{ background: "linear-gradient(90deg, var(--teal), var(--purple), var(--green))" }} />

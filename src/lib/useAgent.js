@@ -101,6 +101,26 @@ export function useAgent({ getGroqKey, getToken } = {}) {
   const briefRef = useRef(null);                 // section-1 research brief (reused 2..11)
   const stepRef = useRef(0);                     // 0-based index into STEP_SPECS
   const parseRetryRef = useRef(0);               // retries for a failed parse
+  // Selected section numbers (1-based). Empty/null = all sections. When a
+  // subset is chosen, generation walks only those, in their natural order.
+  const selectedRef = useRef(null);
+
+  // Is a given STEP_SPECS index selected? (true when no selection = all.)
+  const isSelected = (idx) => {
+    const sel = selectedRef.current;
+    if (!sel || sel.size === 0) return true;
+    const spec = STEP_SPECS[idx];
+    return spec ? sel.has(spec.n) : false;
+  };
+  // Advance stepRef to the next SELECTED step at/after the given index.
+  // Returns the index, or STEP_SPECS.length if none remain.
+  const nextSelectedFrom = (idx) => {
+    let i = idx;
+    while (i < STEP_SPECS.length && !isSelected(i)) i++;
+    return i;
+  };
+  // Is this the last selected step? (no selected steps after it)
+  const isLastSelected = (idx) => nextSelectedFrom(idx + 1) >= STEP_SPECS.length;
 
   // doneCount derives from blocks; nextStepNumber is 1-based for display.
   const nextStepNumber = stepRef.current + 1;
@@ -120,8 +140,8 @@ export function useAgent({ getGroqKey, getToken } = {}) {
       requirement: spec.inst,
       stepNumber: spec.n,
       stepTitle: spec.title,
-      isLast: spec.n === STEP_SPECS.length,
-      searchBrief: briefRef.current || undefined, // present on 2..11
+      isLast: isLastSelected(stepRef.current),
+      searchBrief: briefRef.current || undefined, // present after the first run
     };
   }, []);
 
@@ -250,11 +270,11 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     }
     setCurrent(null);
 
-    const isLast = stepRef.current >= STEP_SPECS.length - 1;
-    const isDone = parsed?.status === "DONE" || isLast;
+    const lastSel = isLastSelected(stepRef.current);
+    const isDone = parsed?.status === "DONE" || lastSel;
 
-    // Advance the pointer for the next manual click.
-    stepRef.current += 1;
+    // Advance the pointer to the next SELECTED step for the next manual click.
+    stepRef.current = nextSelectedFrom(stepRef.current + 1);
 
     if (isDone || stepRef.current >= STEP_SPECS.length) {
       setPhase("done");
@@ -264,12 +284,17 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     }
   }, [buildRequestBody, getGroqKey, getToken]);
 
-  // Kick off a fresh analysis — generates ONLY section 1, then waits.
+  // Kick off a fresh analysis. `selectedSteps` (optional) = array of 1-based
+  // section numbers to generate; omit/empty = all 13. Generates the first
+  // selected section, then waits.
   const start = useCallback(
-    ({ company, industry, region }) => {
-      stepRef.current = 0;
+    ({ company, industry, region, selectedSteps }) => {
+      // Set the selection (null = all).
+      selectedRef.current = (Array.isArray(selectedSteps) && selectedSteps.length)
+        ? new Set(selectedSteps)
+        : null;
       parseRetryRef.current = 0;
-      briefRef.current = null; // fresh company → fresh search on section 1
+      briefRef.current = null; // fresh company → fresh search on the first section
       setBlocks([]);
       setCurrent(null);
       setError(null);
@@ -278,6 +303,8 @@ export function useAgent({ getGroqKey, getToken } = {}) {
         industry: industry || "Unknown",
         region: region || "Global",
       };
+      // Start at the FIRST selected step (not always index 0).
+      stepRef.current = nextSelectedFrom(0);
       runStep();
     },
     [runStep]
@@ -313,6 +340,7 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     briefRef.current = null;
     stepRef.current = 0;
     parseRetryRef.current = 0;
+    selectedRef.current = null;
     setBlocks([]);
     setCurrent(null);
     setError(null);
@@ -325,6 +353,7 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     const arr = Array.isArray(savedBlocks) ? savedBlocks : [];
     const { company, industry, region, brief, resumable = true } = opts;
     parseRetryRef.current = 0;
+    selectedRef.current = null; // resuming → allow generating any remaining section
     // If the saved report carried its research brief, reuse it so resuming
     // does NOT trigger another Brave search. Falls back to re-searching only
     // when no brief was stored (older entries).
@@ -333,17 +362,19 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     setCurrent(null);
     setError(null);
 
-    const lastStep = arr.length; // append-only: blocks are sections 1..N
-    const isComplete = lastStep >= STEP_SPECS.length;
+    // Which section numbers already exist? (blocks may be non-contiguous if the
+    // saved report was generated from a custom selection.)
+    const have = new Set(arr.map((b) => b.stepNumber).filter(Boolean));
+    const isComplete = have.size >= STEP_SPECS.length;
 
     if (isComplete || !resumable) {
       stepRef.current = STEP_SPECS.length;
       setPhase("done");
     } else {
-      // Resume: set company meta so the next section can generate. If we
-      // restored a brief above, the backend reuses it (no search); otherwise
-      // it searches once.
-      stepRef.current = lastStep; // next section index (0-based) = count so far
+      // Resume at the first STEP_SPECS index whose number isn't present yet.
+      let idx = 0;
+      while (idx < STEP_SPECS.length && have.has(STEP_SPECS[idx].n)) idx++;
+      stepRef.current = idx;
       companyMetaRef.current = {
         company: company || "",
         industry: industry || "Unknown",
@@ -359,13 +390,21 @@ export function useAgent({ getGroqKey, getToken } = {}) {
   const nextSpec = STEP_SPECS[stepRef.current];
   const nextStepName = nextSpec ? nextSpec.title : null;
   const stepNames = STEP_SPECS.map((s) => s.title);
+  // Section catalog for the pre-generation picker: [{ n, title }].
+  const allSections = STEP_SPECS.map((s) => ({ n: s.n, title: s.title }));
+  // Effective total for progress display: the number of SELECTED sections
+  // (or all 13 when nothing specific was chosen).
+  const effectiveTotal = (selectedRef.current && selectedRef.current.size)
+    ? selectedRef.current.size
+    : STEP_SPECS.length;
 
   // Read the captured research brief (so App can persist it with the report).
   const getBrief = useCallback(() => briefRef.current || null, []);
 
   return {
     blocks, current, phase, error,
-    doneCount, usableCount, lastFailed, nextStepNumber, nextStepName, stepNames, totalSteps: STEP_SPECS.length,
+    doneCount, usableCount, lastFailed, nextStepNumber, nextStepName, stepNames, allSections, totalSteps: STEP_SPECS.length,
+    effectiveTotal,
     start, next, runStep, finishHere, reset, restore, getBrief,
   };
 }
