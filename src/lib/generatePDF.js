@@ -51,36 +51,110 @@ export async function generatePDF(blocks, company) {
   const sectionHeader = (num, title, color) => {
     doc.addPage();
     bodyFooter();
-    y = M + 6;
+    y = M + 14;
     // number chip
-    doc.setFillColor(...color); doc.roundedRect(M, y, 30, 30, 6, 6, "F");
+    doc.setFillColor(...color); doc.roundedRect(M, y, 32, 32, 7, 7, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
-    doc.text(String(num).padStart(2, "0"), M + 15, y + 20, { align: "center" });
+    doc.text(String(num).padStart(2, "0"), M + 16, y + 21, { align: "center" });
     // title
-    doc.setFont("helvetica", "bold"); doc.setFontSize(17); doc.setTextColor(...INK);
-    const tLines = doc.splitTextToSize(title, W - M * 2 - 42);
-    doc.text(tLines, M + 42, y + 14);
-    y += Math.max(34, tLines.length * 18 + 16);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(...INK);
+    const tLines = doc.splitTextToSize(title, W - M * 2 - 46);
+    doc.text(tLines, M + 46, y + 15);
+    y += Math.max(38, tLines.length * 20 + 16);
     // accent underline
-    doc.setDrawColor(...color); doc.setLineWidth(2); doc.line(M, y, M + 60, y);
+    doc.setDrawColor(...color); doc.setLineWidth(2.5); doc.line(M, y, M + 64, y);
     doc.setLineWidth(0.2);
-    y += 18;
+    y += 26;
     return doc.internal.getCurrentPageInfo().pageNumber; // record page for index
   };
 
   const para = (text, opts = {}) => {
     const size = opts.size || 10; const color = opts.color || SOFT;
+    const lead = opts.lead || size * 1.5; // generous leading for readability
+    const x = M + (opts.indent || 0);
     doc.setFont("helvetica", opts.bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
     const lines = doc.splitTextToSize(String(text || ""), opts.width || W - M * 2 - (opts.indent || 0));
-    lines.forEach((ln) => { need(size + 4); doc.text(ln, M + (opts.indent || 0), y); y += size + 4; });
+    lines.forEach((ln) => { need(lead); doc.text(ln, x, y); y += lead; });
   };
-  const bullet = (text, color = TEAL) => {
-    need(14);
-    doc.setFillColor(...color); doc.circle(M + 4, y - 3, 1.5, "F");
+  const bullet = (text, color = TEAL, opts = {}) => {
+    const indent = opts.indent || 0;
+    const size = 10, lead = 14.5;
+    need(lead);
+    // small filled dot, vertically centered to the first line
+    doc.setFillColor(...color); doc.circle(M + indent + 4, y - 3.2, 1.6, "F");
+    doc.setFont("helvetica", "normal"); doc.setFontSize(size); doc.setTextColor(...SOFT);
+    const lines = doc.splitTextToSize(String(text || ""), W - M * 2 - 18 - indent);
+    lines.forEach((ln) => { need(lead); doc.text(ln, M + indent + 14, y); y += lead; });
+    y += 3;
+  };
+
+  // Lighten a color toward white by factor f (0..1 → how much color remains).
+  const tint = (c, f) => c.map((v) => Math.round(v + (255 - v) * (1 - f)));
+
+  // A content card: measures exact height from wrapped text, draws a soft
+  // rounded panel with a left accent bar, then renders the title + bullets.
+  const cardPanel = (title, bullets, color) => {
+    const padX = 16, padY = 14;
+    const innerW = W - M * 2 - padX * 2 - 4;
+    const titleLines = doc.splitTextToSize(String(title || ""), innerW);
+    // Pre-wrap each bullet to count lines.
+    const wrapped = (bullets || []).map((b) => doc.splitTextToSize(String(b || ""), innerW - 14));
+    const titleH = titleLines.length * 15 + 8;
+    const bulletsH = wrapped.reduce((s, ln) => s + ln.length * 14.5 + 3, 0);
+    const h = padY * 2 + titleH + bulletsH;
+
+    need(h + 12);
+    const top = y;
+    doc.setFillColor(...tint(color, 0.05)); doc.setDrawColor(...tint(color, 0.22)); doc.setLineWidth(0.6);
+    doc.roundedRect(M, top, W - M * 2, h, 11, 11, "FD");
+    doc.setFillColor(...color); doc.roundedRect(M, top, 3.5, h, 2, 2, "F");
+
+    let cy = top + padY + 11;
+    const cx = M + padX + 6;
+    // title
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.setTextColor(...color);
+    titleLines.forEach((ln) => { doc.text(ln, cx, cy); cy += 15; });
+    cy += 4;
+    // bullets
     doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...SOFT);
-    const lines = doc.splitTextToSize(String(text || ""), W - M * 2 - 16);
-    lines.forEach((ln) => { need(14); doc.text(ln, M + 14, y); y += 13; });
-    y += 2;
+    wrapped.forEach((lns) => {
+      doc.setFillColor(...color); doc.circle(cx + 2, cy - 3.2, 1.5, "F");
+      lns.forEach((ln) => { doc.text(ln, cx + 12, cy); cy += 14.5; });
+      cy += 3;
+    });
+    y = top + h + 12;
+  };
+
+  // A panel with a title, an optional right-aligned badge, and a body paragraph.
+  // Used for pain points and decision-maker entries.
+  const infoPanel = (title, body, color, badge) => {
+    const padX = 16, padY = 13;
+    const innerW = W - M * 2 - padX * 2 - 4 - (badge ? 70 : 0);
+    const titleLines = doc.splitTextToSize(String(title || ""), innerW);
+    const bodyLines = body ? doc.splitTextToSize(String(body), W - M * 2 - padX * 2 - 4) : [];
+    const h = padY * 2 + titleLines.length * 15 + (bodyLines.length ? bodyLines.length * 14 + 6 : 0);
+
+    need(h + 10);
+    const top = y;
+    doc.setFillColor(...tint(color, 0.05)); doc.setDrawColor(...tint(color, 0.22)); doc.setLineWidth(0.6);
+    doc.roundedRect(M, top, W - M * 2, h, 11, 11, "FD");
+    doc.setFillColor(...color); doc.roundedRect(M, top, 3.5, h, 2, 2, "F");
+
+    let cy = top + padY + 10;
+    const cx = M + padX + 6;
+    // badge (severity / role tag)
+    if (badge) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...color);
+      doc.text(String(badge).toUpperCase(), W - M - padX, cy, { align: "right" });
+    }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.setTextColor(...INK);
+    titleLines.forEach((ln) => { doc.text(ln, cx, cy); cy += 15; });
+    if (bodyLines.length) {
+      cy += 4;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...SOFT);
+      bodyLines.forEach((ln) => { doc.text(ln, cx, cy); cy += 14; });
+    }
+    y = top + h + 10;
   };
   const gap = (h = 10) => { y += h; };
 
@@ -192,11 +266,7 @@ export async function generatePDF(blocks, company) {
               y += 100;
             }
             (data.cards || []).forEach((c) => {
-              need(22);
-              doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...color);
-              doc.text(c.title || "", M, y); y += 15;
-              (c.bullets || []).forEach((bl) => bullet(bl, color));
-              gap(6);
+              cardPanel(c.title || "", c.bullets || [], color);
             });
             break;
           }
@@ -206,14 +276,8 @@ export async function generatePDF(blocks, company) {
             const low = (data.points || []).filter((p) => p.severity === "low").length;
             drawSeverity(high, med, low);
             (data.points || []).forEach((p) => {
-              need(30);
               const sc = p.severity === "high" ? RED : p.severity === "medium" ? [180, 83, 9] : FAINT;
-              doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...INK);
-              doc.text(p.title || "", M, y);
-              doc.setFontSize(8); doc.setTextColor(...sc);
-              doc.text((p.severity || "").toUpperCase(), W - M, y, { align: "right" });
-              y += 14;
-              para(p.description || "", { size: 9, color: SOFT }); gap(6);
+              infoPanel(p.title || "", p.description || "", sc, (p.severity || "") + " severity");
             });
             break;
           }
@@ -224,15 +288,22 @@ export async function generatePDF(blocks, company) {
               break;
             }
             people.forEach((p) => {
-              need(38);
+              // name + title as a panel; URL rendered as a link line inside.
+              const padX = 16, padY = 13;
+              const titleLines = doc.splitTextToSize(p.name || "", W - M * 2 - padX * 2 - 4);
+              const subLines = p.title ? doc.splitTextToSize(p.title, W - M * 2 - padX * 2 - 4) : [];
+              const h = padY * 2 + titleLines.length * 15 + (subLines.length * 13) + (p.url ? 16 : 0) + 4;
+              need(h + 10);
+              const top = y;
+              doc.setFillColor(...tint(PURPLE, 0.05)); doc.setDrawColor(...tint(PURPLE, 0.22)); doc.setLineWidth(0.6);
+              doc.roundedRect(M, top, W - M * 2, h, 11, 11, "FD");
+              doc.setFillColor(...PURPLE); doc.roundedRect(M, top, 3.5, h, 2, 2, "F");
+              let cy = top + padY + 10; const cx = M + padX + 6;
               doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...INK);
-              doc.text(p.name || "", M, y); y += 14;
-              if (p.title) { doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...SOFT); doc.text(p.title, M, y); y += 13; }
-              if (p.url) {
-                doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...IB_BLUE);
-                doc.textWithLink(p.url, M, y, { url: p.url }); y += 14;
-              }
-              gap(6);
+              titleLines.forEach((ln) => { doc.text(ln, cx, cy); cy += 15; });
+              if (subLines.length) { doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...SOFT); subLines.forEach((ln) => { doc.text(ln, cx, cy); cy += 13; }); }
+              if (p.url) { cy += 3; doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...IB_BLUE); doc.textWithLink(p.url, cx, cy, { url: p.url }); }
+              y = top + h + 10;
             });
             break;
           }
