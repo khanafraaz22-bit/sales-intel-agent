@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { ProgressBar, PercentRow, Gauge, Pill, Donut, BarChart, SeverityBar } from "./charts.jsx";
 import WorldMap from "./WorldMap.jsx";
 import CompanyLogo from "./CompanyLogo.jsx";
 import { generatePDF } from "../lib/generatePDF.js";
+import { CardModal, ExpandableCard } from "./CardModal.jsx";
 
 // ── helpers ──
 const reveal = {
@@ -55,6 +57,11 @@ export default function Dashboard({
   lastFailed = false,
   onNext = null,           // generate the next section
 }) {
+  // Click-to-expand modal state. `modal` holds { title, section, kind, data }.
+  const [modal, setModal] = useState(null);
+  const openModal = (payload) => setModal(payload);
+  const closeModal = () => setModal(null);
+
   const hero = find(blocks, "HERO");
   const metrics = find(blocks, "METRICS");
   const cardGrids = findAll(blocks, "CARD_GRID"); // [business, operations, tech]
@@ -159,16 +166,25 @@ export default function Dashboard({
           {metrics?.items && (
             <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
               className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {metrics.items.slice(0, 4).map((m, i) => (
-                <motion.div key={i} variants={reveal} whileHover={{ y: -4 }}
-                  className="card card-glow p-5">
-                  <div className="eyebrow">{m.label}</div>
-                  <div className="font-display mt-2 text-2xl font-bold ink">{m.value}</div>
-                  <div className="mt-1 text-xs" style={{ color: m.signal === "positive" ? "var(--green)" : m.signal === "negative" ? "var(--red)" : "var(--ink-faint)" }}>
-                    {m.signal === "positive" ? "▲" : m.signal === "negative" ? "▼" : "—"} signal
-                  </div>
-                </motion.div>
-              ))}
+              {metrics.items.slice(0, 4).map((m, i) => {
+                const sigColor = m.signal === "positive" ? "var(--green)" : m.signal === "negative" ? "var(--red)" : "var(--ink-faint)";
+                const orbClass = ["card-orb", "card-orb card-orb-purple", "card-orb card-orb-green", "card-orb"][i % 4];
+                return (
+                  <motion.div key={i} variants={reveal} whileHover={{ y: -4 }}
+                    className={`card card-glow ${orbClass} p-5`}>
+                    <div className="flex items-start justify-between">
+                      <div className="eyebrow">{m.label}</div>
+                      {/* circular signal badge */}
+                      <span className="orb-badge h-7 w-7 text-[11px]"
+                        style={{ background: `color-mix(in srgb, ${sigColor} 16%, transparent)`, color: sigColor }}>
+                        {m.signal === "positive" ? "▲" : m.signal === "negative" ? "▼" : "—"}
+                      </span>
+                    </div>
+                    <div className="font-display mt-2 text-2xl font-bold ink">{m.value}</div>
+                    <div className="mt-1 text-xs" style={{ color: sigColor }}>{m.signal} signal</div>
+                  </motion.div>
+                );
+              })}
             </motion.div>
           )}
 
@@ -212,18 +228,20 @@ export default function Dashboard({
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
             className="grid gap-4 sm:grid-cols-2">
             {business.cards.map((c, i) => (
-              <motion.div key={i} variants={reveal} whileHover={{ y: -4 }}
-                className={`card card-glow p-5 ${i % 2 ? "card-accent-purple" : "card-accent-teal"}`}>
-                <div className="eyebrow" style={{ color: i % 2 ? "var(--purple)" : "var(--teal)" }}>{c.title}</div>
-                <ul className="mt-3 space-y-2">
-                  {(c.bullets || []).map((b, j) => (
-                    <li key={j} className="flex gap-2 text-sm ink-soft">
-                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: i % 2 ? "var(--purple)" : "var(--teal)" }} />
-                      {b}
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
+              <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: "Business Model", kind: "bullets", data: c })}>
+                <motion.div variants={reveal} whileHover={{ y: -4 }}
+                  className={`card card-glow card-orb ${i % 2 ? "card-accent-purple card-orb-purple" : "card-accent-teal"} p-5`}>
+                  <div className="eyebrow" style={{ color: i % 2 ? "var(--purple)" : "var(--teal)" }}>{c.title}</div>
+                  <ul className="mt-3 space-y-2">
+                    {(c.bullets || []).map((b, j) => (
+                      <li key={j} className="flex gap-2 text-sm ink-soft">
+                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: i % 2 ? "var(--purple)" : "var(--teal)" }} />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              </ExpandableCard>
             ))}
           </motion.div>
         </Section>
@@ -235,15 +253,17 @@ export default function Dashboard({
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {operations.cards.map((c, i) => (
-              <motion.div key={i} variants={reveal} whileHover={{ y: -4 }} className="card card-glow p-5">
-                <span className="glow-dot inline-block h-2 w-2 rounded-full" style={{ color: "var(--cyan)", background: "var(--cyan)" }} />
-                <div className="eyebrow mt-3">{c.title}</div>
-                <ul className="mt-2 space-y-1.5">
-                  {(c.bullets || []).map((b, j) => (
-                    <li key={j} className="text-xs ink-soft">{b}</li>
-                  ))}
-                </ul>
-              </motion.div>
+              <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: "Operations & Distribution", kind: "bullets", data: c })}>
+                <motion.div variants={reveal} whileHover={{ y: -4 }} className="card card-glow p-5">
+                  <span className="glow-dot inline-block h-2 w-2 rounded-full" style={{ color: "var(--cyan)", background: "var(--cyan)" }} />
+                  <div className="eyebrow mt-3">{c.title}</div>
+                  <ul className="mt-2 space-y-1.5">
+                    {(c.bullets || []).map((b, j) => (
+                      <li key={j} className="text-xs ink-soft">{b}</li>
+                    ))}
+                  </ul>
+                </motion.div>
+              </ExpandableCard>
             ))}
           </motion.div>
         </Section>
@@ -256,26 +276,28 @@ export default function Dashboard({
             {tech.cards.map((c, i) => {
               const isMaturity = /maturity|level/i.test(c.title);
               return (
-                <motion.div key={i} variants={reveal} initial="hidden" whileInView="show" viewport={{ once: true }}
-                  className="card card-glow p-5">
-                  <div className="eyebrow" style={{ color: i % 2 ? "var(--purple)" : "var(--teal)" }}>{c.title}</div>
-                  {isMaturity ? (
-                    <div className="mt-4 space-y-3">
-                      {(c.bullets || []).map((b, j) => (
-                        <ProgressBar key={j} label={b} level={["Advanced", "Emerging", "Leading"][j % 3]}
-                          color={["var(--green)", "var(--teal)", "var(--purple)"][j % 3]} />
-                      ))}
-                    </div>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      {(c.bullets || []).map((b, j) => (
-                        <li key={j} className="flex items-center justify-between gap-2 text-sm ink-soft">
-                          <span className="flex gap-2"><span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: "var(--teal)" }} />{b}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </motion.div>
+                <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: "Technology Stack", kind: "bullets", data: c })}>
+                  <motion.div variants={reveal} initial="hidden" whileInView="show" viewport={{ once: true }}
+                    className="card card-glow p-5">
+                    <div className="eyebrow" style={{ color: i % 2 ? "var(--purple)" : "var(--teal)" }}>{c.title}</div>
+                    {isMaturity ? (
+                      <div className="mt-4 space-y-3">
+                        {(c.bullets || []).map((b, j) => (
+                          <ProgressBar key={j} label={b} level={["Advanced", "Emerging", "Leading"][j % 3]}
+                            color={["var(--green)", "var(--teal)", "var(--purple)"][j % 3]} />
+                        ))}
+                      </div>
+                    ) : (
+                      <ul className="mt-3 space-y-2">
+                        {(c.bullets || []).map((b, j) => (
+                          <li key={j} className="flex items-center justify-between gap-2 text-sm ink-soft">
+                            <span className="flex gap-2"><span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: "var(--teal)" }} />{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </motion.div>
+                </ExpandableCard>
               );
             })}
           </div>
@@ -300,14 +322,16 @@ export default function Dashboard({
                 {pains.points.map((p, i) => {
                   const sev = p.severity === "high" ? ["var(--red)", "var(--red-soft)", "HIGH RISK"] : p.severity === "medium" ? ["var(--purple)", "var(--purple-soft)", "MED RISK"] : ["var(--ink-faint)", "var(--surface-2)", "LOW RISK"];
                   return (
-                    <motion.div key={i} variants={reveal} initial="hidden" whileInView="show" viewport={{ once: true }}
-                      className="card card-glow flex items-center justify-between p-4">
-                      <div>
-                        <div className="text-sm font-semibold ink">{p.title}</div>
-                        <div className="eyebrow mt-1">{p.description?.slice(0, 40)}</div>
-                      </div>
-                      <Pill color={sev[0]} soft={sev[1]}>{sev[2]}</Pill>
-                    </motion.div>
+                    <ExpandableCard key={i} onExpand={() => openModal({ title: p.title, section: "Pain Point Analysis", kind: "pain", data: p })}>
+                      <motion.div variants={reveal} initial="hidden" whileInView="show" viewport={{ once: true }}
+                        className="card card-glow flex items-center justify-between p-4">
+                        <div>
+                          <div className="text-sm font-semibold ink">{p.title}</div>
+                          <div className="eyebrow mt-1">{p.description?.slice(0, 40)}</div>
+                        </div>
+                        <Pill color={sev[0]} soft={sev[1]}>{sev[2]}</Pill>
+                      </motion.div>
+                    </ExpandableCard>
                   );
                 })}
               </div>
@@ -345,17 +369,19 @@ export default function Dashboard({
                 {solutions.solutions.slice(0, 3).map((s, i) => {
                   const impact = (s.impact || "").match(/(\d+%?)/);
                   return (
-                    <motion.div key={i} variants={reveal} whileHover={{ y: -4 }} className="card card-glow p-5">
-                      <h3 className="font-display text-lg font-bold ink">{s.name}</h3>
-                      <p className="mt-2 text-sm ink-soft">{s.problem_solved}</p>
-                      <div className="mt-4 rounded-xl p-4" style={{ background: "var(--surface-2)" }}>
-                        <div className="eyebrow" style={{ color: "var(--green)" }}>Business Impact</div>
-                        <div className="mt-1 flex items-baseline gap-2">
-                          {impact && <span className="font-display text-2xl font-bold" style={{ color: "var(--green)" }}>{impact[1]}</span>}
-                          <span className="text-sm ink-soft">{s.impact?.replace(impact?.[1] || "", "").slice(0, 24)}</span>
+                    <ExpandableCard key={i} onExpand={() => openModal({ title: s.name, section: "Recommended Solution Stack", kind: "solution", data: s })}>
+                      <motion.div variants={reveal} whileHover={{ y: -4 }} className="card card-glow card-orb-green card-orb p-5">
+                        <h3 className="font-display text-lg font-bold ink">{s.name}</h3>
+                        <p className="mt-2 text-sm ink-soft">{s.problem_solved}</p>
+                        <div className="mt-4 rounded-2xl p-4" style={{ background: "var(--surface-2)" }}>
+                          <div className="eyebrow" style={{ color: "var(--green)" }}>Business Impact</div>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            {impact && <span className="font-display text-2xl font-bold" style={{ color: "var(--green)" }}>{impact[1]}</span>}
+                            <span className="text-sm ink-soft">{s.impact?.replace(impact?.[1] || "", "").slice(0, 24)}</span>
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
+                      </motion.div>
+                    </ExpandableCard>
                   );
                 })}
               </motion.div>
@@ -371,7 +397,10 @@ export default function Dashboard({
             className="grid gap-3 sm:grid-cols-2">
             {insights.insights.map((ins, i) => (
               <motion.div key={i} variants={reveal} className="card card-glow flex gap-3 p-4">
-                <span className="font-mono text-xs font-bold" style={{ color: "var(--teal)" }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="orb-badge h-7 w-7 font-mono text-xs"
+                  style={{ background: "color-mix(in srgb, var(--teal) 14%, transparent)", color: "var(--teal)" }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
                 <span className="text-sm ink-soft">{ins}</span>
               </motion.div>
             ))}
@@ -384,19 +413,31 @@ export default function Dashboard({
         <Section eyebrow="06 · Stakeholders" title="Buyer Personas" accent="var(--purple)">
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {personas.personas.map((p, i) => (
-              <motion.div key={i} variants={reveal} whileHover={{ y: -5 }} className="card card-glow p-5">
-                <h3 className="font-display font-bold ink">{p.role}</h3>
-                <div className="mt-3 space-y-2">
-                  <div><div className="eyebrow" style={{ color: "var(--teal)" }}>Focus</div><p className="text-xs ink-soft">{p.focus}</p></div>
-                  <div><div className="eyebrow" style={{ color: "var(--purple)" }}>Motivation</div><p className="text-xs ink-soft">{p.motivation}</p></div>
-                </div>
-                <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--red)", background: "var(--red-soft)" }}>
-                  <div className="eyebrow" style={{ color: "var(--red)" }}>Likely Objection</div>
-                  <p className="mt-1 text-xs italic ink">"{p.objection}"</p>
-                </div>
-              </motion.div>
-            ))}
+            {personas.personas.map((p, i) => {
+              const initials = (p.role || "?").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+              const aColor = ["var(--teal)", "var(--purple)", "var(--cyan)", "var(--green)"][i % 4];
+              return (
+                <ExpandableCard key={i} onExpand={() => openModal({ title: p.role, section: "Buyer Personas", kind: "persona", data: p })}>
+                  <motion.div variants={reveal} whileHover={{ y: -5 }} className="card card-glow card-orb p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="orb-badge h-11 w-11 text-sm"
+                        style={{ background: `color-mix(in srgb, ${aColor} 18%, transparent)`, color: aColor }}>
+                        {initials}
+                      </span>
+                      <h3 className="font-display font-bold leading-tight ink">{p.role}</h3>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div><div className="eyebrow" style={{ color: "var(--teal)" }}>Focus</div><p className="text-xs ink-soft">{p.focus}</p></div>
+                      <div><div className="eyebrow" style={{ color: "var(--purple)" }}>Motivation</div><p className="text-xs ink-soft">{p.motivation}</p></div>
+                    </div>
+                    <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "var(--red)", background: "var(--red-soft)" }}>
+                      <div className="eyebrow" style={{ color: "var(--red)" }}>Likely Objection</div>
+                      <p className="mt-1 text-xs italic ink">"{p.objection}"</p>
+                    </div>
+                  </motion.div>
+                </ExpandableCard>
+              );
+            })}
           </motion.div>
         </Section>
       )}
@@ -416,16 +457,18 @@ export default function Dashboard({
                     style={{ background: "var(--bg)", border: `2px solid ${c}`, color: c }}>
                     {String(i + 1).padStart(2, "0")}
                   </div>
-                  <div className="card card-glow mt-4 p-5" style={{ boxShadow: `inset 3px 0 0 ${c}` }}>
-                    <h3 className="font-display font-bold" style={{ color: c }}>{phase.phase}</h3>
-                    <ul className="mt-3 space-y-2">
-                      {(phase.actions || []).map((a, j) => (
-                        <li key={j} className="flex gap-2 text-xs ink-soft">
-                          <span className="mt-1 h-1 w-1 shrink-0 rounded-full" style={{ background: c }} />{a}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  <ExpandableCard onExpand={() => openModal({ title: phase.phase, section: "Sales Strategy Roadmap", kind: "phase", data: phase })}>
+                    <div className="card card-glow mt-4 p-5" style={{ boxShadow: `inset 3px 0 0 ${c}` }}>
+                      <h3 className="font-display font-bold" style={{ color: c }}>{phase.phase}</h3>
+                      <ul className="mt-3 space-y-2">
+                        {(phase.actions || []).map((a, j) => (
+                          <li key={j} className="flex gap-2 text-xs ink-soft">
+                            <span className="mt-1 h-1 w-1 shrink-0 rounded-full" style={{ background: c }} />{a}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </ExpandableCard>
                 </motion.div>
               );
             })}
@@ -473,6 +516,19 @@ export default function Dashboard({
             )}
           </div>
         </motion.div>
+      )}
+
+      {/* Expandable card modal */}
+      {modal && (
+        <CardModal
+          open={Boolean(modal)}
+          onClose={closeModal}
+          title={modal.title}
+          company={company || heroFallback.company_name}
+          section={modal.section}
+          kind={modal.kind}
+          data={modal.data}
+        />
       )}
 
       {/* footer */}

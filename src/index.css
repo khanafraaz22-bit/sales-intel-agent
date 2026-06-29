@@ -125,7 +125,7 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; 
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: 1.5rem;
   position: relative;
   transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -182,6 +182,42 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; 
 .card-accent-teal { box-shadow: inset 3px 0 0 var(--teal); }
 .card-accent-purple { box-shadow: inset 3px 0 0 var(--purple); }
 .card-accent-green { box-shadow: inset 3px 0 0 var(--green); }
+
+/* ── Decorative shapes ── */
+/* Soft circular glow tucked into a card corner — breaks the rectangle. */
+.card-orb {
+  position: relative;
+  overflow: hidden;
+}
+.card-orb::before {
+  content: "";
+  position: absolute;
+  width: 120px; height: 120px;
+  top: -50px; right: -40px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--teal) 22%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.card-orb-purple::before { background: radial-gradient(circle, color-mix(in srgb, var(--purple) 22%, transparent), transparent 70%); }
+.card-orb-green::before  { background: radial-gradient(circle, color-mix(in srgb, var(--green) 20%, transparent), transparent 70%); }
+
+/* Circular initials / number badge. */
+.orb-badge {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9999px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Pill tag — fully rounded. */
+.pill-tag {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  border-radius: 9999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
 /* glow dot */
 .glow-dot { box-shadow: 0 0 8px 1px currentColor; }
