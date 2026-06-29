@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 
-const STEP_NAMES = [
+// Fallback names if the parent doesn't pass the list.
+const DEFAULT_STEP_NAMES = [
   "Company Snapshot", "Financial Signals", "Business Model", "Operations",
   "Technology Stack", "Pain Points", "Opportunity Map", "Analyst Insights",
   "Solution Stack", "Buyer Personas", "Strategy Roadmap",
@@ -9,12 +10,15 @@ const STEP_NAMES = [
 // Manual step-by-step generation view.
 // Props:
 //   company, doneCount, usableCount, lastFailed, current, error
+//   stepNames, totalSteps — the section titles + count (single source of truth)
 //   running  — a section is currently streaming
 //   onNext   — generate the next section (or retry current on error/waiting)
 //   onFinish — stop here and view the report with the sections done so far
-export default function Generating({ company, doneCount, usableCount = doneCount, lastFailed = false, current, error, running, onNext, onFinish }) {
-  const pct = Math.round((doneCount / 11) * 100);
-  const allDone = doneCount >= 11;
+export default function Generating({ company, doneCount, usableCount = doneCount, lastFailed = false, current, error, running, onNext, onFinish, stepNames, totalSteps }) {
+  const STEP_NAMES = (stepNames && stepNames.length) ? stepNames : DEFAULT_STEP_NAMES;
+  const TOTAL = totalSteps || STEP_NAMES.length;
+  const pct = Math.round((doneCount / TOTAL) * 100);
+  const allDone = doneCount >= TOTAL;
   const nextName = STEP_NAMES[doneCount];
 
   return (
@@ -29,13 +33,13 @@ export default function Generating({ company, doneCount, usableCount = doneCount
           <motion.circle
             cx="60" cy="60" r="52" fill="none" stroke="var(--teal)" strokeWidth="6" strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 52}
-            animate={{ strokeDashoffset: 2 * Math.PI * 52 * (1 - doneCount / 11) }}
+            animate={{ strokeDashoffset: 2 * Math.PI * 52 * (1 - doneCount / TOTAL) }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="font-display text-2xl font-bold ink">{pct}%</span>
-          <span className="font-mono text-[10px] ink-faint">{doneCount}/11</span>
+          <span className="font-mono text-[10px] ink-faint">{doneCount}/{TOTAL}</span>
         </div>
       </div>
 
@@ -53,7 +57,7 @@ export default function Generating({ company, doneCount, usableCount = doneCount
           <span className="font-mono text-sm" style={{ color: "var(--teal)" }}>All sections complete</span>
         ) : (
           <span className="font-mono text-sm ink-soft">
-            {doneCount === 0 ? "Ready to begin" : `${doneCount} of 11 done — ready for next`}
+            {doneCount === 0 ? "Ready to begin" : `${doneCount} of ${TOTAL} done — ready for next`}
           </span>
         )}
       </div>
@@ -118,7 +122,7 @@ export default function Generating({ company, doneCount, usableCount = doneCount
           <button onClick={onFinish} disabled={running}
             className="font-mono rounded-lg border px-5 py-2.5 text-xs uppercase tracking-wide ink-soft transition hover:border-teal hover:text-teal disabled:opacity-40"
             style={{ borderColor: "var(--border)" }}>
-            {allDone ? "View full report" : `View report so far (${usableCount}/11)`}
+            {allDone ? "View full report" : `View report so far (${usableCount}/${TOTAL})`}
           </button>
         )}
       </div>

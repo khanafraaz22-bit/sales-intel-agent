@@ -38,32 +38,41 @@ Be specific to the company. Keep every bullet under 2 lines.`;
 const AGENT_ENDPOINT = "/api/agent-groq";
 // ────────────────────────────────────────────────────────────────
 
+// ── InfraBeat capability profile (the vendor this report sells for) ──
+// Source of truth for how sections 12-13 frame InfraBeat's fit. Update here
+// when the positioning is refined; both pain-mapping and roadmap reference it.
+const INFRABEAT = "InfraBeat Technologies (Pune-based SAP + cloud + AI consultancy, ~650 staff, 300+ engagements, 15+ countries). Capabilities: SAP S/4HANA migrations, SAP BTP, SAP Ariba (procurement), SAP SuccessFactors (HR), SAP Analytics Cloud, SAP Basis, ABAP, Fiori, AMS (application management), and SAP iRPA; plus cloud migration on AWS/Azure/Google Cloud, data engineering, AI & advanced analytics, Power BI/Tableau dashboards, DevOps, and enterprise automation. Positioned as a long-term digital-transformation partner, not just an implementer.";
+
 // ── EXPLICIT STEP SEQUENCE (code-enforced) ──────────────────────
 // We tell the model EXACTLY which step, block type, and title to emit each turn.
 // The server-side order is the source of truth, not the model's memory.
 const STEP_SPECS = [
-  { n: 1, type: "HERO", title: "Company Snapshot",
-    inst: "Establish identity, growth stage, and the sharpest sales angle. Include key_locations: an array of 4-8 major cities where this company actually operates (HQ, major offices, key markets), each as \"City, Country\"." },
-  { n: 2, type: "METRICS", title: "Signals",
-    inst: "Revenue range, headcount, growth rate, digital maturity, market complexity." },
-  { n: 3, type: "CARD_GRID", title: "Business Model Analysis",
-    inst: "Exactly 4 cards: Revenue Streams, Customer Segments, Value Proposition, Competitive Moat." },
-  { n: 4, type: "CARD_GRID", title: "Operations & Distribution",
-    inst: "Exactly 4 cards: Supply Chain, Delivery Model, Key Geographies, Operational Risks." },
-  { n: 5, type: "CARD_GRID", title: "Technology Stack",
-    inst: "Exactly 4 cards: Current Platforms, Known Integrations, Tech Gaps, Maturity Level." },
-  { n: 6, type: "PAIN_POINTS", title: "Pain Point Analysis",
-    inst: "4-5 specific pains tied to their business model. Severity reflects real impact." },
-  { n: 7, type: "TABLE", title: "Opportunity Map",
-    inst: "Columns: Opportunity, Pain It Solves, Decision Maker, Priority. 5-6 rows." },
-  { n: 8, type: "INSIGHTS", title: "AI Analyst Insights",
-    inst: "6-8 sharp, non-obvious, company-specific observations for a live call." },
-  { n: 9, type: "SOLUTIONS", title: "Recommended Solution Stack",
-    inst: "4-5 solutions mapped to the pains from Step 6. Name problem solved + business impact." },
-  { n: 10, type: "PERSONAS", title: "Buyer Personas",
-    inst: "3-4 personas. Each includes a real objection they will raise." },
-  { n: 11, type: "ROADMAP", title: "Sales Strategy Roadmap",
-    inst: "3 phases (Outreach, Discovery, Close), 3-4 tailored actions each. Set STATUS: DONE." },
+  { n: 1, type: "HERO", title: "Executive Summary & Value Proposition",
+    inst: "Establish the company's identity, scale, industry, market position, and the sharpest value proposition. Include key_locations: an array of 4-8 major cities where this company actually operates (HQ, key markets, major sites/plants/offices), each as \"City, Country\". key_insight should capture the core strategic story; sales_angle should frame the headline opportunity for a digital-transformation / SAP & cloud partner." },
+  { n: 2, type: "METRICS", title: "Financial Health & Revenue Trajectory",
+    inst: "Revenue range and recent trajectory (last ~2-3 years), growth rate, headcount, profitability/margin signal, and digital maturity. Use real figures where known; mark estimates as approximate." },
+  { n: 3, type: "CARD_GRID", title: "Core Operations & Business Model",
+    inst: "Exactly 4 cards: Primary Business Activities, Revenue Streams & Segments, Operating Footprint & Scale, Key Operational Risks. Adapt to the company's actual industry (manufacturing, services, retail, utilities, pharma, public sector, etc.)." },
+  { n: 4, type: "CARD_GRID", title: "Production / Service Delivery Infrastructure",
+    inst: "Exactly 4 cards: Production or Service-Delivery Model, Capacity & Key Sites/Facilities, In-house vs Outsourced Split, Delivery/Production Risks. For a manufacturer cover plants; for a service firm cover delivery centers; adapt to the industry." },
+  { n: 5, type: "CARD_GRID", title: "Distribution & Customer Channels",
+    inst: "Exactly 4 cards: Go-to-Market & Channels, Customer Segments Served, Geographic Reach, Channel / Customer-Experience Gaps. Adapt to the industry (B2B, B2C, wholesale, direct, public, etc.)." },
+  { n: 6, type: "CARD_GRID", title: "Supply Chain & Procurement Ecosystem",
+    inst: "Exactly 4 cards: Supplier Base & Sourcing Geographies, Procurement Model & Systems (note any SAP Ariba / e-procurement signals), Supply Chain Visibility/Maturity, Key Supply Chain Risks." },
+  { n: 7, type: "CARD_GRID", title: "Logistics & Fulfillment Dynamics",
+    inst: "Exactly 4 cards: Fulfillment / Distribution Model, Transportation & Last-Mile (where relevant), Inventory & Warehousing Approach, Logistics Technology & Gaps. Adapt to the industry; skip last-mile for non-physical businesses and cover service logistics instead." },
+  { n: 8, type: "CARD_GRID", title: "Technology Landscape",
+    inst: "Exactly 4 cards: Core Platforms (ERP, CRM, industry systems), Known Integrations & Data Estate, Technology Gaps & Legacy Debt, Digital Maturity Level. Note current ERP (especially any SAP footprint) and modernization signals." },
+  { n: 9, type: "CARD_GRID", title: "Digital, Data & Automation Maturity",
+    inst: "Exactly 4 cards: Digital/Customer-Facing Systems, Data & Analytics Maturity (BI, reporting, dashboards), Automation & AI Adoption, Integration & Digital Gaps. This surfaces opportunities for analytics, AI, and automation partners." },
+  { n: 10, type: "CARD_GRID", title: "Sustainability, CSR & Compliance Profile",
+    inst: "Exactly 4 cards: Sustainability Commitments & Targets, CSR Initiatives, Regulatory/Compliance Exposure, ESG Reporting Maturity." },
+  { n: 11, type: "DECISION_MAKERS", title: "Decision-Maker Intelligence",
+    inst: "Real top decision-makers (CEO, Founder, CFO, CTO, COO, President, etc.) for this company, sourced from public LinkedIn profiles. Each entry: name, title, and LinkedIn profile URL. Do not invent people — only real, linkable profiles." },
+  { n: 12, type: "PAIN_POINTS", title: "Pain Points & InfraBeat Opportunity Matrix",
+    inst: `4-6 specific, evidence-based pain points tied to this company's operations, technology, supply chain, procurement, HR, analytics, or cloud estate. For each, the description should connect the pain to a concrete InfraBeat capability that addresses it. ${INFRABEAT} Map each pain to the most relevant InfraBeat service (e.g. legacy ERP → S/4HANA migration; procurement inefficiency → SAP Ariba; HR/talent → SuccessFactors; fragmented reporting → SAP Analytics Cloud / Power BI / Tableau; infrastructure cost → AWS/Azure/GCP cloud migration; manual processes → iRPA automation). Severity reflects real business impact.` },
+  { n: 13, type: "ROADMAP", title: "Strategic Recommendations & Roadmap",
+    inst: `3 phases (e.g. Assess & Align, Modernize Core, Innovate & Scale), 3-4 tailored actions each, framed as InfraBeat's recommended engagement path for this company. ${INFRABEAT} Actions should draw on InfraBeat's real services (SAP S/4HANA/BTP/Ariba/SuccessFactors/SAC, cloud migration on AWS/Azure/GCP, data engineering, AI/analytics, Power BI/Tableau, iRPA automation, AMS) and be specific to this company's situation. Set STATUS: DONE.` },
 ];
 
 export const TOTAL_STEPS = STEP_SPECS.length;
@@ -204,7 +213,17 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     }
 
     if (parsed && parsed.blockData) {
-      setBlocks((b) => [...b, parsed]);
+      // Stamp the block with the AUTHORITATIVE step number + title from the
+      // spec (not whatever the model echoed in STEP_TITLE), and dedup by step
+      // number so a retry or stray duplicate replaces the slot instead of
+      // appending a second card section with a drifted title.
+      const stamped = { ...parsed, stepNumber: spec.n, stepTitle: spec.title, blockType: spec.type };
+      setBlocks((b) => {
+        const without = b.filter((x) => x.stepNumber !== spec.n);
+        const next = [...without, stamped];
+        next.sort((x, y) => (x.stepNumber || 0) - (y.stepNumber || 0));
+        return next;
+      });
       parseRetryRef.current = 0;
     } else {
       // Block didn't parse (truncated, empty, or malformed — often a transient
@@ -300,8 +319,8 @@ export function useAgent({ getGroqKey, getToken } = {}) {
     setPhase("idle");
   }, []);
 
-  // Restore a saved report. If it's PARTIAL (fewer than 11 blocks), set the
-  // step pointer to resume from the next section; if complete, go to "done".
+  // Restore a saved report. If it's PARTIAL (fewer blocks than STEP_SPECS),
+  // set the step pointer to resume from the next section; if complete → "done".
   const restore = useCallback((savedBlocks, opts = {}) => {
     const arr = Array.isArray(savedBlocks) ? savedBlocks : [];
     const { company, industry, region, brief, resumable = true } = opts;
@@ -339,13 +358,14 @@ export function useAgent({ getGroqKey, getToken } = {}) {
   const lastFailed = blocks.length > 0 && blocks[blocks.length - 1]?.blockData == null;
   const nextSpec = STEP_SPECS[stepRef.current];
   const nextStepName = nextSpec ? nextSpec.title : null;
+  const stepNames = STEP_SPECS.map((s) => s.title);
 
   // Read the captured research brief (so App can persist it with the report).
   const getBrief = useCallback(() => briefRef.current || null, []);
 
   return {
     blocks, current, phase, error,
-    doneCount, usableCount, lastFailed, nextStepNumber, nextStepName, totalSteps: STEP_SPECS.length,
+    doneCount, usableCount, lastFailed, nextStepNumber, nextStepName, stepNames, totalSteps: STEP_SPECS.length,
     start, next, runStep, finishHere, reset, restore, getBrief,
   };
 }

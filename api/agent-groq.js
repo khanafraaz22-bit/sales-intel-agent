@@ -21,7 +21,7 @@
 // Response (plain text block + optional BRIEF sentinel on section 1):
 //   STEP_NUMBER / STEP_TITLE / THOUGHT / BLOCK_TYPE / BLOCK_DATA / STATUS
 
-import { braveCompanyBrief, isBraveConfigured } from "./_brave.js";
+import { braveCompanyBrief, braveLinkedInProfiles, isBraveConfigured } from "./_brave.js";
 import { getUserId, checkLimit, commitUsage, isLimitConfigured } from "./_limit.js";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -50,6 +50,7 @@ const BLOCK_SCHEMAS = {
   SOLUTIONS: `{"solutions":[{"name":string,"problem_solved":string,"impact":string}]}`,
   PERSONAS: `{"personas":[{"role":string,"focus":string,"motivation":string,"objection":string}]}`,
   ROADMAP: `{"phases":[{"phase":string,"actions":[string,...]}]}`,
+  DECISION_MAKERS: `{"people":[{"name":string,"title":string,"url":string}]}`,
 };
 
 async function fetchWithRetry(body, key, onWait) {
@@ -202,6 +203,32 @@ export default async function handler(req, res) {
     // (Failed/empty searches don't consume the user's daily quota.)
     if (briefIsNew && limitUserId) {
       try { await commitUsage(limitUserId); } catch { /* non-fatal */ }
+    }
+
+    // ── DECISION_MAKERS: real LinkedIn profiles, NOT model-generated. ──
+    // A separate Brave call (one per company, only when this section runs).
+    // We return the real profiles directly so nothing is fabricated. This
+    // call does NOT count against the daily limit (whole report = 1 search).
+    if (blockType === "DECISION_MAKERS") {
+      let people = [];
+      if (isBraveConfigured()) {
+        res.write(SEARCH_SENTINEL); // UI shows "Searching the web…"
+        try { people = await braveLinkedInProfiles({ company }); } catch { people = []; }
+      }
+      const status = isLast ? "DONE" : "CONTINUE";
+      const json = JSON.stringify({ people });
+      res.write(
+        `STEP_NUMBER: ${stepNumber}\n` +
+        `STEP_TITLE: ${stepTitle}\n` +
+        `THOUGHT: Public LinkedIn decision-makers for ${company}.\n` +
+        `BLOCK_TYPE: DECISION_MAKERS\n` +
+        `BLOCK_DATA:\n${json}\n` +
+        `STATUS: ${status}\n`
+      );
+      // Pass the brief back too if it was freshly fetched here.
+      if (briefIsNew && brief) res.write(`${BRIEF_SENTINEL}${brief}`);
+      res.end();
+      return;
     }
 
     // ── STAGE 2: format the block (uses brief if present, else model knowledge). ──

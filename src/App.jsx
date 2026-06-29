@@ -36,7 +36,7 @@ export default function App() {
 
   const {
     blocks, current, phase, error,
-    doneCount, usableCount, lastFailed, nextStepName, totalSteps,
+    doneCount, usableCount, lastFailed, nextStepName, stepNames, totalSteps,
     start, next, runStep, finishHere, reset, restore, getBrief,
   } = useAgent({ getGroqKey, getToken });
   const [company, setCompany] = useState("");
@@ -232,6 +232,8 @@ export default function App() {
                   current={current}
                   error={error}
                   running={running}
+                  stepNames={stepNames}
+                  totalSteps={totalSteps}
                   onNext={next}
                   onFinish={finishHere}
                 />

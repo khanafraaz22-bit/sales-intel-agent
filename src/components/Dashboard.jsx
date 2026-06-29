@@ -64,19 +64,28 @@ export default function Dashboard({
 
   const hero = find(blocks, "HERO");
   const metrics = find(blocks, "METRICS");
-  const cardGrids = findAll(blocks, "CARD_GRID"); // [business, operations, tech]
-  const [business, operations, tech] = cardGrids;
+  const metricsTitle = blocks.find((b) => b.blockType === "METRICS")?.stepTitle || "Financial Signals";
+  // All CARD_GRID sections, paired with their section titles, rendered
+  // uniformly below. (Retail report has 8; this handles any number.)
+  const cardSections = blocks
+    .filter((b) => b.blockType === "CARD_GRID" && b.blockData)
+    .map((b) => ({ title: b.stepTitle || "Details", data: b.blockData }));
   const pains = find(blocks, "PAIN_POINTS");
+  const painsTitle = blocks.find((b) => b.blockType === "PAIN_POINTS")?.stepTitle || "Pain Point Analysis";
   const table = find(blocks, "TABLE");
   const insights = find(blocks, "INSIGHTS");
   const solutions = find(blocks, "SOLUTIONS");
   const personas = find(blocks, "PERSONAS");
+  const personasTitle = blocks.find((b) => b.blockType === "PERSONAS")?.stepTitle || "Buyer Personas";
+  const decisionMakers = find(blocks, "DECISION_MAKERS");
+  const decisionMakersTitle = blocks.find((b) => b.blockType === "DECISION_MAKERS")?.stepTitle || "Decision-Maker Intelligence";
   const roadmap = find(blocks, "ROADMAP");
+  const roadmapTitle = blocks.find((b) => b.blockType === "ROADMAP")?.stepTitle || "Sales Strategy Roadmap";
 
   // A report is empty if NO block produced usable data (e.g. only failed-parse
   // placeholders, which have blockData: null). Without this guard the page
   // would render just a footer and look broken.
-  const hasAnyData = [hero, metrics, business, operations, tech, pains, table, insights, solutions, personas, roadmap]
+  const hasAnyData = [hero, metrics, ...cardSections.map((s) => s.data), pains, table, insights, solutions, personas, decisionMakers, roadmap]
     .some((d) => d != null);
 
   if (!hasAnyData) {
@@ -162,32 +171,6 @@ export default function Dashboard({
           </div>
           {heroFallback.key_insight && <p className="mt-4 max-w-2xl text-[0.95rem] leading-relaxed ink-soft">{heroFallback.key_insight}</p>}
 
-          {/* Metric cards */}
-          {metrics?.items && (
-            <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
-              className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {metrics.items.slice(0, 4).map((m, i) => {
-                const sigColor = m.signal === "positive" ? "var(--green)" : m.signal === "negative" ? "var(--red)" : "var(--ink-faint)";
-                const orbClass = ["card-orb", "card-orb card-orb-purple", "card-orb card-orb-green", "card-orb"][i % 4];
-                return (
-                  <motion.div key={i} variants={reveal} whileHover={{ y: -4 }}
-                    className={`card card-glow ${orbClass} p-5`}>
-                    <div className="flex items-start justify-between">
-                      <div className="eyebrow">{m.label}</div>
-                      {/* circular signal badge */}
-                      <span className="orb-badge h-7 w-7 text-[11px]"
-                        style={{ background: `color-mix(in srgb, ${sigColor} 16%, transparent)`, color: sigColor }}>
-                        {m.signal === "positive" ? "▲" : m.signal === "negative" ? "▼" : "—"}
-                      </span>
-                    </div>
-                    <div className="font-display mt-2 text-2xl font-bold ink">{m.value}</div>
-                    <div className="mt-1 text-xs" style={{ color: sigColor }}>{m.signal} signal</div>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-
           {/* Summary + sales angle + world map — only when HERO actually produced content */}
           {(heroFallback.key_insight || heroFallback.sales_angle || (heroFallback.key_locations || []).length > 0) && (
             <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -211,102 +194,163 @@ export default function Dashboard({
         </motion.section>
       )}
 
-      {/* ─── BUSINESS MODEL ─── */}
-      {business?.cards && (
-        <Section eyebrow="01 · Business Model" title="Revenue & Market Position" accent="var(--teal)">
-          {(() => {
-            // If any card has percentage bullets (e.g. revenue streams), show a donut.
-            const pctCard = business.cards.find((c) => extractPercents(c.bullets).length >= 2);
-            const segs = pctCard ? extractPercents(pctCard.bullets) : null;
-            return segs ? (
-              <div className="card mb-4 p-5">
-                <div className="eyebrow mb-3" style={{ color: "var(--teal)" }}>{pctCard.title}</div>
-                <Donut segments={segs} />
-              </div>
-            ) : null;
-          })()}
-          <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
-            className="grid gap-4 sm:grid-cols-2">
-            {business.cards.map((c, i) => (
-              <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: "Business Model", kind: "bullets", data: c })}>
-                <motion.div variants={reveal} whileHover={{ y: -4 }}
-                  className={`card card-glow card-orb ${i % 2 ? "card-accent-purple card-orb-purple" : "card-accent-teal"} p-5`}>
-                  <div className="eyebrow" style={{ color: i % 2 ? "var(--purple)" : "var(--teal)" }}>{c.title}</div>
-                  <ul className="mt-3 space-y-2">
-                    {(c.bullets || []).map((b, j) => (
-                      <li key={j} className="flex gap-2 text-sm ink-soft">
-                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: i % 2 ? "var(--purple)" : "var(--teal)" }} />
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              </ExpandableCard>
-            ))}
-          </motion.div>
-        </Section>
-      )}
-
-      {/* ─── OPERATIONS ─── */}
-      {operations?.cards && (
-        <Section eyebrow="02 · Operations" title="Operations & Distribution" accent="var(--cyan)">
+      {/* ─── FINANCIAL HEALTH / METRICS ─── */}
+      {metrics?.items && (
+        <Section eyebrow={`02 · ${metricsTitle}`} title={metricsTitle} accent="var(--green)">
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {operations.cards.map((c, i) => (
-              <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: "Operations & Distribution", kind: "bullets", data: c })}>
-                <motion.div variants={reveal} whileHover={{ y: -4 }} className="card card-glow p-5">
-                  <span className="glow-dot inline-block h-2 w-2 rounded-full" style={{ color: "var(--cyan)", background: "var(--cyan)" }} />
-                  <div className="eyebrow mt-3">{c.title}</div>
-                  <ul className="mt-2 space-y-1.5">
-                    {(c.bullets || []).map((b, j) => (
-                      <li key={j} className="text-xs ink-soft">{b}</li>
-                    ))}
-                  </ul>
+            {metrics.items.map((m, i) => {
+              const sigColor = m.signal === "positive" ? "var(--green)" : m.signal === "negative" ? "var(--red)" : "var(--ink-faint)";
+              const orbClass = ["card-orb", "card-orb card-orb-purple", "card-orb card-orb-green", "card-orb"][i % 4];
+              return (
+                <motion.div key={i} variants={reveal} whileHover={{ y: -4 }}
+                  className={`card card-glow ${orbClass} p-5`}>
+                  <div className="flex items-start justify-between">
+                    <div className="eyebrow">{m.label}</div>
+                    <span className="orb-badge h-7 w-7 text-[11px]"
+                      style={{ background: `color-mix(in srgb, ${sigColor} 16%, transparent)`, color: sigColor }}>
+                      {m.signal === "positive" ? "▲" : m.signal === "negative" ? "▼" : "—"}
+                    </span>
+                  </div>
+                  <div className="font-display mt-2 text-2xl font-bold ink">{m.value}</div>
+                  <div className="mt-1 text-xs" style={{ color: sigColor }}>{m.signal} signal</div>
                 </motion.div>
-              </ExpandableCard>
-            ))}
+              );
+            })}
           </motion.div>
         </Section>
       )}
 
-      {/* ─── TECH STACK ─── */}
-      {tech?.cards && (
-        <Section eyebrow="03 · Technology" title="Technology Stack" accent="var(--purple)">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {tech.cards.map((c, i) => {
-              const isMaturity = /maturity|level/i.test(c.title);
-              return (
-                <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: "Technology Stack", kind: "bullets", data: c })}>
-                  <motion.div variants={reveal} initial="hidden" whileInView="show" viewport={{ once: true }}
-                    className="card card-glow p-5">
-                    <div className="eyebrow" style={{ color: i % 2 ? "var(--purple)" : "var(--teal)" }}>{c.title}</div>
-                    {isMaturity ? (
-                      <div className="mt-4 space-y-3">
-                        {(c.bullets || []).map((b, j) => (
-                          <ProgressBar key={j} label={b} level={["Advanced", "Emerging", "Leading"][j % 3]}
-                            color={["var(--green)", "var(--teal)", "var(--purple)"][j % 3]} />
-                        ))}
+      {/* ─── CARD-GRID SECTIONS (uniform; retail report has 8) ─── */}
+      {cardSections.map((sec, si) => {
+        const accents = ["var(--teal)", "var(--purple)", "var(--cyan)", "var(--green)"];
+        const accent = accents[si % accents.length];
+        const orbVariants = ["", "card-orb-purple", "", "card-orb-green"];
+        // If any card has percentage bullets (e.g. revenue mix), show a donut.
+        const pctCard = (sec.data.cards || []).find((c) => extractPercents(c.bullets).length >= 2);
+        const segs = pctCard ? extractPercents(pctCard.bullets) : null;
+        return (
+          <Section key={si} eyebrow={`${String(si + 1).padStart(2, "0")} · ${sec.title}`} title={sec.title} accent={accent}>
+            {segs && (
+              <div className="card mb-4 p-5">
+                <div className="eyebrow mb-3" style={{ color: accent }}>{pctCard.title}</div>
+                <Donut segments={segs} />
+              </div>
+            )}
+            <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
+              className="grid gap-4 sm:grid-cols-2">
+              {(sec.data.cards || []).map((c, i) => {
+                const isMaturity = /maturity|level/i.test(c.title || "");
+                const cardAccent = i % 2 ? "var(--purple)" : accent;
+                return (
+                  <ExpandableCard key={i} onExpand={() => openModal({ title: c.title, section: sec.title, kind: "bullets", data: c })}>
+                    <motion.div variants={reveal} whileHover={{ y: -4 }}
+                      className={`card card-glow card-orb ${i % 2 ? "card-orb-purple" : si % 4 === 3 ? "card-orb-green" : ""} p-5`}>
+                      <div className="eyebrow" style={{ color: cardAccent }}>{c.title}</div>
+                      {isMaturity ? (
+                        <div className="mt-4 space-y-3">
+                          {(c.bullets || []).map((b, j) => (
+                            <ProgressBar key={j} label={b} level={["Advanced", "Emerging", "Leading"][j % 3]}
+                              color={["var(--green)", "var(--teal)", "var(--purple)"][j % 3]} />
+                          ))}
+                        </div>
+                      ) : (
+                        <ul className="mt-3 space-y-2">
+                          {(c.bullets || []).map((b, j) => (
+                            <li key={j} className="flex gap-2 text-sm ink-soft">
+                              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: cardAccent }} />
+                              {b}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </motion.div>
+                  </ExpandableCard>
+                );
+              })}
+            </motion.div>
+          </Section>
+        );
+      })}
+
+      {/* ─── DECISION-MAKERS (real LinkedIn profiles) ─── */}
+      {decisionMakers && (
+        <Section eyebrow={`11 · ${decisionMakersTitle}`} title={decisionMakersTitle} accent="var(--purple)">
+          {(decisionMakers.people || []).length > 0 ? (
+            <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {decisionMakers.people.map((p, i) => {
+                const initials = (p.name || "?").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+                const aColor = ["var(--teal)", "var(--purple)", "var(--cyan)", "var(--green)"][i % 4];
+                return (
+                  <motion.a key={i} variants={reveal} whileHover={{ y: -4 }}
+                    href={p.url} target="_blank" rel="noreferrer"
+                    className="card card-glow card-orb block p-5"
+                    title="Open LinkedIn profile">
+                    <div className="flex items-center gap-3">
+                      <span className="orb-badge h-12 w-12 text-sm"
+                        style={{ background: `color-mix(in srgb, ${aColor} 18%, transparent)`, color: aColor }}>
+                        {initials}
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="font-display truncate font-bold leading-tight ink">{p.name}</h3>
+                        {p.title && <p className="truncate text-xs ink-soft">{p.title}</p>}
                       </div>
-                    ) : (
-                      <ul className="mt-3 space-y-2">
-                        {(c.bullets || []).map((b, j) => (
-                          <li key={j} className="flex items-center justify-between gap-2 text-sm ink-soft">
-                            <span className="flex gap-2"><span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: "var(--teal)" }} />{b}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    </div>
+                    <div className="mt-4 flex items-center gap-1.5 text-xs" style={{ color: "var(--teal)" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" /></svg>
+                      View LinkedIn profile
+                    </div>
+                  </motion.a>
+                );
+              })}
+            </motion.div>
+          ) : (
+            <div className="card p-6 text-center text-sm ink-soft">
+              No public LinkedIn profiles were found for this company's decision-makers.
+              {" "}This is common for smaller or privately-held companies whose leadership isn't publicly indexed.
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ─── PERSONAS ─── */}
+      {personas?.personas && (
+        <Section eyebrow={`11 · ${personasTitle}`} title={personasTitle} accent="var(--purple)">
+          <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {personas.personas.map((p, i) => {
+              const initials = (p.role || "?").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+              const aColor = ["var(--teal)", "var(--purple)", "var(--cyan)", "var(--green)"][i % 4];
+              return (
+                <ExpandableCard key={i} onExpand={() => openModal({ title: p.role, section: "Buyer Personas", kind: "persona", data: p })}>
+                  <motion.div variants={reveal} whileHover={{ y: -5 }} className="card card-glow card-orb p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="orb-badge h-11 w-11 text-sm"
+                        style={{ background: `color-mix(in srgb, ${aColor} 18%, transparent)`, color: aColor }}>
+                        {initials}
+                      </span>
+                      <h3 className="font-display font-bold leading-tight ink">{p.role}</h3>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div><div className="eyebrow" style={{ color: "var(--teal)" }}>Focus</div><p className="text-xs ink-soft">{p.focus}</p></div>
+                      <div><div className="eyebrow" style={{ color: "var(--purple)" }}>Motivation</div><p className="text-xs ink-soft">{p.motivation}</p></div>
+                    </div>
+                    <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "var(--red)", background: "var(--red-soft)" }}>
+                      <div className="eyebrow" style={{ color: "var(--red)" }}>Likely Objection</div>
+                      <p className="mt-1 text-xs italic ink">"{p.objection}"</p>
+                    </div>
                   </motion.div>
                 </ExpandableCard>
               );
             })}
-          </div>
+          </motion.div>
         </Section>
       )}
 
       {/* ─── OPPORTUNITY: pains + table ─── */}
       {(pains?.points || table?.rows) && (
-        <Section eyebrow="04 · Opportunity" title="Opportunity Map & Strategy" accent="var(--cyan)">
+        <Section eyebrow={`12 · ${painsTitle}`} title={painsTitle} accent="var(--red)">
           <div className="grid gap-4 lg:grid-cols-5">
             {/* pains */}
             {pains?.points && (
@@ -408,43 +452,9 @@ export default function Dashboard({
         </Section>
       )}
 
-      {/* ─── PERSONAS ─── */}
-      {personas?.personas && (
-        <Section eyebrow="06 · Stakeholders" title="Buyer Personas" accent="var(--purple)">
-          <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {personas.personas.map((p, i) => {
-              const initials = (p.role || "?").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-              const aColor = ["var(--teal)", "var(--purple)", "var(--cyan)", "var(--green)"][i % 4];
-              return (
-                <ExpandableCard key={i} onExpand={() => openModal({ title: p.role, section: "Buyer Personas", kind: "persona", data: p })}>
-                  <motion.div variants={reveal} whileHover={{ y: -5 }} className="card card-glow card-orb p-5">
-                    <div className="flex items-center gap-3">
-                      <span className="orb-badge h-11 w-11 text-sm"
-                        style={{ background: `color-mix(in srgb, ${aColor} 18%, transparent)`, color: aColor }}>
-                        {initials}
-                      </span>
-                      <h3 className="font-display font-bold leading-tight ink">{p.role}</h3>
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      <div><div className="eyebrow" style={{ color: "var(--teal)" }}>Focus</div><p className="text-xs ink-soft">{p.focus}</p></div>
-                      <div><div className="eyebrow" style={{ color: "var(--purple)" }}>Motivation</div><p className="text-xs ink-soft">{p.motivation}</p></div>
-                    </div>
-                    <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "var(--red)", background: "var(--red-soft)" }}>
-                      <div className="eyebrow" style={{ color: "var(--red)" }}>Likely Objection</div>
-                      <p className="mt-1 text-xs italic ink">"{p.objection}"</p>
-                    </div>
-                  </motion.div>
-                </ExpandableCard>
-              );
-            })}
-          </motion.div>
-        </Section>
-      )}
-
       {/* ─── ROADMAP ─── */}
       {roadmap?.phases && (
-        <Section eyebrow="07 · Execution" title="Sales Strategy Roadmap" accent="var(--green)">
+        <Section eyebrow={`13 · ${roadmapTitle}`} title={roadmapTitle} accent="var(--green)">
           <div className="relative grid gap-4 md:grid-cols-3">
             {/* connecting line */}
             <div className="absolute left-0 right-0 top-5 hidden h-px md:block" style={{ background: "linear-gradient(90deg, var(--teal), var(--purple), var(--green))" }} />

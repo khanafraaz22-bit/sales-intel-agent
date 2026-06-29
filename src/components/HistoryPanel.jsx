@@ -64,8 +64,9 @@ export default function HistoryPanel({ open, onToggle, items, loading, onRestore
                       <span className="font-mono text-xs ink-faint" title={fullStamp(r.created_at)}>
                         {(() => {
                           const done = (r.blocks || []).filter((b) => b && b.blockData != null).length;
-                          const label = done >= 11 ? "Complete" : `${done}/11 · resume`;
-                          return <><span style={{ color: done >= 11 ? "var(--green)" : "var(--teal)" }}>{label}</span> · {timeAgo(r.created_at)}</>;
+                          const TOTAL = 13;
+                          const label = done >= TOTAL ? "Complete" : `${done}/${TOTAL} · resume`;
+                          return <><span style={{ color: done >= TOTAL ? "var(--green)" : "var(--teal)" }}>{label}</span> · {timeAgo(r.created_at)}</>;
                         })()}
                       </span>
                     </span>
@@ -87,5 +88,5 @@ export default function HistoryPanel({ open, onToggle, items, loading, onRestore
         )}
       </AnimatePresence>
     </div>
-   );
+  );
 }
