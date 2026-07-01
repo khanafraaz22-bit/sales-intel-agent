@@ -7,6 +7,7 @@ import { useHistory } from "./lib/useHistory.js";
 import { useGroqKey } from "./lib/useGroqKey.js";
 import { useUsage } from "./lib/useUsage.js";
 import { useRole } from "./lib/useRole.js";
+import AdminPanel from "./components/AdminPanel.jsx";
 import { supabase, isSupabaseConfigured } from "./lib/supabase.js";
 import Landing from "./components/Landing.jsx";
 import Generating from "./components/Generating.jsx";
@@ -45,6 +46,7 @@ export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | "login" | "signup"
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   // "Welcome" vs "Welcome back".
   const [isFirstVisit, setIsFirstVisit] = useState(false);
@@ -139,6 +141,15 @@ export default function App() {
             )}
             {auth.authed && (
               <>
+                {role.elevated && (
+                  <button onClick={() => setShowAdmin(true)}
+                    className="font-mono flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition hover:border-purple"
+                    style={{ borderColor: "var(--border)", color: "var(--purple)" }}
+                    title="Admin control center">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5z" /></svg>
+                    Admin
+                  </button>
+                )}
                 {usage.configured && usage.remaining !== null && (
                   <span className="font-mono hidden items-center gap-1.5 rounded-full border px-3 py-1 text-xs sm:flex"
                     style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
@@ -275,6 +286,10 @@ export default function App() {
           <AnimatePresence>
             {showSettings && auth.authed && (
               <AccountSettings auth={auth} groq={groq} onClose={() => setShowSettings(false)} />
+            )}
+
+            {role.elevated && (
+              <AdminPanel open={showAdmin} onClose={() => setShowAdmin(false)} token={auth.session?.access_token} />
             )}
           </AnimatePresence>
         </>
