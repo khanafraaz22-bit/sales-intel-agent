@@ -32,6 +32,23 @@ export default async function handler(req, res) {
     if (error) { res.statusCode = 500; res.end(JSON.stringify({ error: "Failed to load users." })); return; }
 
     const ids = (profiles || []).map((p) => p.id);
+
+    // Usernames live in auth.users.user_metadata (captured at signup), not in
+    // profiles. Pull them via the admin auth API and index by id. Best-effort:
+    // if it fails, email still shows.
+    const usernameById = {};
+    try {
+      for (let page = 1; page <= 20; page++) {
+        const { data: list } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+        const batch = list?.users || [];
+        batch.forEach((u) => {
+          const name = (u.user_metadata?.username || "").trim();
+          if (name) usernameById[u.id] = name;
+        });
+        if (batch.length < 200) break; // reached last page
+      }
+    } catch { /* ignore — username is optional */ }
+
     // Report counts per user.
     const reportCount = {};
     const searchesToday = {};
@@ -45,6 +62,7 @@ export default async function handler(req, res) {
     const users = (profiles || []).map((p) => ({
       id: p.id,
       email: p.email || "unknown",
+      username: usernameById[p.id] || "",
       role: p.role || "user",
       created_at: p.created_at,
       report_count: reportCount[p.id] || 0,

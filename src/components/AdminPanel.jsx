@@ -217,7 +217,7 @@ function UsersTab({ token, isAdmin = false }) {
       <div className="space-y-2">
         {users.map((u) => {
           const roleColor = u.role === "admin" ? "var(--red)" : u.role === "manager" ? "var(--purple)" : "var(--ink-faint)";
-          const initials = (u.email || "?").slice(0, 2).toUpperCase();
+          const initials = (u.username || u.email || "?").slice(0, 2).toUpperCase();
           return (
             <motion.div key={u.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
               className="card card-glow flex flex-wrap items-center justify-between gap-3 p-3"
@@ -227,9 +227,10 @@ function UsersTab({ token, isAdmin = false }) {
                   style={{ background: `color-mix(in srgb, ${roleColor} 18%, transparent)`, color: roleColor }}>{initials}</span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold ink">{u.email}</span>
+                    <span className="truncate text-sm font-semibold ink">{u.username || u.email}</span>
                     {u.is_self && <span className="pill-tag" style={{ background: "var(--surface-2)", color: "var(--teal)" }}>YOU</span>}
                   </div>
+                  {u.username && <div className="truncate text-xs ink-soft">{u.email}</div>}
                   <div className="font-mono text-[11px] ink-faint">{u.report_count} reports · {u.searches_today} today</div>
                 </div>
               </div>
