@@ -6,6 +6,7 @@ import { useAuth } from "./lib/useAuth.js";
 import { useHistory } from "./lib/useHistory.js";
 import { useGroqKey } from "./lib/useGroqKey.js";
 import { useUsage } from "./lib/useUsage.js";
+import { useRole } from "./lib/useRole.js";
 import { supabase, isSupabaseConfigured } from "./lib/supabase.js";
 import Landing from "./components/Landing.jsx";
 import Generating from "./components/Generating.jsx";
@@ -23,6 +24,7 @@ export default function App() {
   const history = useHistory(auth.authed);
   const groq = useGroqKey(auth.user?.id);
   const usage = useUsage(auth.session, auth.authed);
+  const role = useRole(auth.session, auth.authed);
 
   // Give the agent a live getter for the current Groq key (read at request time).
   const groqKeyRef = useRef(groq.groqKey);
