@@ -2,26 +2,46 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase.js";
 
 // Per-user report history backed by the Supabase `reports` table. RLS ensures
-// each user only sees their own rows, so we use the normal (anon + session)
-// client — no service key on the frontend.
-export function useHistory(authed) {
-  const [items, setItems] = useState([]); // [{ id, company, blocks, created_at }]
+// each regular user only sees their own rows. ELEVATED users (admin/manager)
+// instead load ALL users' reports via the server (service-key, role-checked),
+// each tagged with the owner's email.
+export function useHistory(authed, opts = {}) {
+  const { elevated = false, session = null } = opts;
+  const [items, setItems] = useState([]); // [{ id, company, blocks, created_at, owner_email? }]
   const [loading, setLoading] = useState(false);
+  const [viewingAll, setViewingAll] = useState(false);
 
   const load = useCallback(async () => {
     if (!isSupabaseConfigured || !authed) { setItems([]); return; }
     setLoading(true);
     try {
+      // Elevated → load ALL reports from the server (role-enforced).
+      if (elevated && session?.access_token) {
+        try {
+          const resp = await fetch("/api/all-reports", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            setItems(data.reports || []);
+            setViewingAll(true);
+            return;
+          }
+          // If forbidden/errored, fall through to own-reports view.
+        } catch { /* fall through */ }
+      }
+      // Regular path: own reports only (RLS-protected).
       const { data, error } = await supabase
         .from("reports")
         .select("id, company, blocks, brief, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
       if (!error && data) setItems(data);
+      setViewingAll(false);
     } finally {
       setLoading(false);
     }
-  }, [authed]);
+  }, [authed, elevated, session]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -100,5 +120,5 @@ export function useHistory(authed) {
     await supabase.from("reports").delete().eq("id", id);
   }, []);
 
-  return { items, loading, load, save, touch, remove };
+  return { items, loading, viewingAll, load, save, touch, remove };
 }

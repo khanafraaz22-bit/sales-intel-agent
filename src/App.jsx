@@ -21,10 +21,10 @@ import GroqKeyGate from "./components/GroqKeyGate.jsx";
 export default function App() {
   const { theme, toggle } = useTheme();
   const auth = useAuth();
-  const history = useHistory(auth.authed);
+  const role = useRole(auth.session, auth.authed);
+  const history = useHistory(auth.authed, { elevated: role.elevated, session: auth.session });
   const groq = useGroqKey(auth.user?.id);
   const usage = useUsage(auth.session, auth.authed);
-  const role = useRole(auth.session, auth.authed);
 
   // Give the agent a live getter for the current Groq key (read at request time).
   const groqKeyRef = useRef(groq.groqKey);
@@ -215,6 +215,7 @@ export default function App() {
                     onToggle={() => setShowHistory((v) => !v)}
                     items={history.items}
                     loading={history.loading}
+                    viewingAll={history.viewingAll}
                     onRestore={handleRestore}
                     onDelete={history.remove}
                   />

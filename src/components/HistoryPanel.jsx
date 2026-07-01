@@ -16,7 +16,7 @@ function fullStamp(iso) {
   });
 }
 
-export default function HistoryPanel({ open, onToggle, items, loading, onRestore, onDelete }) {
+export default function HistoryPanel({ open, onToggle, items, loading, onRestore, onDelete, viewingAll = false }) {
   return (
     <div className="mx-auto mt-8 max-w-3xl px-4">
       <div className="flex justify-center">
@@ -39,7 +39,7 @@ export default function HistoryPanel({ open, onToggle, items, loading, onRestore
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }} className="overflow-hidden">
             <div className="mt-4 space-y-2">
-              <div className="eyebrow text-center" style={{ color: "var(--teal)" }}>Your Search History</div>
+              <div className="eyebrow text-center" style={{ color: viewingAll ? "var(--purple)" : "var(--teal)" }}>{viewingAll ? "All Reports · Admin View" : "Your Search History"}</div>
 
               {loading && <p className="text-body py-4 text-center text-sm ink-faint">Loading history…</p>}
 
@@ -61,6 +61,11 @@ export default function HistoryPanel({ open, onToggle, items, loading, onRestore
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate font-display text-sm font-bold ink">{r.company}</span>
+                      {r.owner_email && (
+                        <span className="block truncate font-mono text-[10px]" style={{ color: "var(--purple)" }} title={`Owner: ${r.owner_email}`}>
+                          {r.owner_email}
+                        </span>
+                      )}
                       <span className="font-mono text-xs ink-faint" title={fullStamp(r.created_at)}>
                         {(() => {
                           const done = (r.blocks || []).filter((b) => b && b.blockData != null).length;
