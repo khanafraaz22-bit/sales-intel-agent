@@ -91,7 +91,23 @@ Do NOT repeat any previous step. Do NOT skip ahead. Emit exactly one block of ty
 //   idle -> running -> waiting(after each step) -> running -> ... -> done
 // The user clicks "Generate next section" to advance; there is no auto-advance
 // and no inter-step cooldown chain. With BYOK each user has their own quota.
-export function useAgent({ getGroqKey, getToken } = {}) {
+export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
+  // Resolve the EFFECTIVE spec for an index, applying admin settings overrides:
+  // a custom title (title_overrides[n]) and the current InfraBeat positioning
+  // text substituted into the instruction (the default text is a placeholder
+  // token the settings value replaces).
+  const effectiveSpec = (idx) => {
+    const spec = STEP_SPECS[idx];
+    if (!spec) return spec;
+    const s = getSettings ? getSettings() : null;
+    const titleOverride = s?.title_overrides?.[String(spec.n)];
+    const ibText = (s?.infrabeat_text && s.infrabeat_text.trim()) ? s.infrabeat_text.trim() : INFRABEAT;
+    return {
+      ...spec,
+      title: titleOverride || spec.title,
+      inst: spec.inst.split(INFRABEAT).join(ibText), // swap InfraBeat text if present
+    };
+  };
   const [blocks, setBlocks] = useState([]);     // completed step snapshots
   const [current, setCurrent] = useState(null); // the step currently streaming
   const [phase, setPhase] = useState("idle");   // idle | running | waiting | done | error
@@ -129,7 +145,7 @@ export function useAgent({ getGroqKey, getToken } = {}) {
   // the two-stage (search → format) pipeline; we pass the cached brief so it
   // only searches on section 1.
   const buildRequestBody = useCallback((groqKey) => {
-    const spec = STEP_SPECS[stepRef.current];
+    const spec = effectiveSpec(stepRef.current);
     const meta = companyMetaRef.current;
     return {
       groqKey,
@@ -147,7 +163,7 @@ export function useAgent({ getGroqKey, getToken } = {}) {
 
   // Run exactly ONE step, then stop in "waiting" (or "done" on the last step).
   const runStep = useCallback(async () => {
-    const spec = STEP_SPECS[stepRef.current];
+    const spec = effectiveSpec(stepRef.current);
     if (!spec) { setPhase("done"); return; }
 
     const groqKey = getGroqKey ? getGroqKey() : "";
@@ -387,11 +403,14 @@ export function useAgent({ getGroqKey, getToken } = {}) {
   const doneCount = blocks.length;
   const usableCount = blocks.filter((b) => b && b.blockData != null).length;
   const lastFailed = blocks.length > 0 && blocks[blocks.length - 1]?.blockData == null;
-  const nextSpec = STEP_SPECS[stepRef.current];
+  const nextSpec = STEP_SPECS[stepRef.current] ? effectiveSpec(stepRef.current) : null;
   const nextStepName = nextSpec ? nextSpec.title : null;
-  const stepNames = STEP_SPECS.map((s) => s.title);
+  // Apply admin title overrides to the catalogs shown in the UI.
+  const settingsNow = getSettings ? getSettings() : null;
+  const titleFor = (spec) => settingsNow?.title_overrides?.[String(spec.n)] || spec.title;
+  const stepNames = STEP_SPECS.map((s) => titleFor(s));
   // Section catalog for the pre-generation picker: [{ n, title }].
-  const allSections = STEP_SPECS.map((s) => ({ n: s.n, title: s.title }));
+  const allSections = STEP_SPECS.map((s) => ({ n: s.n, title: titleFor(s), defaultTitle: s.title }));
   // Effective total for progress display: the number of SELECTED sections
   // (or all 13 when nothing specific was chosen).
   const effectiveTotal = (selectedRef.current && selectedRef.current.size)

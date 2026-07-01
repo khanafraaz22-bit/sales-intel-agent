@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // Hidden admin surface (only mounted for elevated users). Two tabs:
 // Users (list, change role, remove) and Analytics (aggregate stats). All data
 // comes from role-checked server endpoints; the UI is only the presentation.
-export default function AdminPanel({ open, onClose, token }) {
+export default function AdminPanel({ open, onClose, token, sections = [], settingsHook = null }) {
   const [tab, setTab] = useState("users");
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function AdminPanel({ open, onClose, token }) {
 
             {/* tabs */}
             <div className="flex gap-1 border-b px-4 pt-3" style={{ borderColor: "var(--border)" }}>
-              {["users", "analytics"].map((t) => (
+              {["users", "analytics", "config"].map((t) => (
                 <button key={t} onClick={() => setTab(t)}
                   className="font-mono rounded-t-lg px-4 py-2 text-xs uppercase tracking-wide transition"
                   style={{ color: tab === t ? "var(--purple)" : "var(--ink-faint)", borderBottom: tab === t ? "2px solid var(--purple)" : "2px solid transparent" }}>
@@ -47,7 +47,9 @@ export default function AdminPanel({ open, onClose, token }) {
             </div>
 
             <div className="overflow-y-auto p-6">
-              {tab === "users" ? <UsersTab token={token} /> : <AnalyticsTab token={token} />}
+              {tab === "users" ? <UsersTab token={token} />
+                : tab === "analytics" ? <AnalyticsTab token={token} />
+                : <ConfigTab sections={sections} settingsHook={settingsHook} />}
             </div>
           </motion.div>
         </motion.div>
@@ -238,6 +240,65 @@ function AnalyticsTab({ token }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ConfigTab({ sections, settingsHook }) {
+  const current = settingsHook?.settings || { infrabeat_text: null, title_overrides: {} };
+  const [ibText, setIbText] = useState(current.infrabeat_text || "");
+  const [titles, setTitles] = useState(() => {
+    // Seed with current effective titles so admin edits from a full list.
+    const seed = {};
+    (sections || []).forEach((s) => { seed[s.n] = (current.title_overrides?.[String(s.n)]) || s.title; });
+    return seed;
+  });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    // Only send title overrides that DIFFER from the default section title.
+    const overrides = {};
+    (sections || []).forEach((s) => {
+      const v = (titles[s.n] || "").trim();
+      if (v && v !== s.defaultTitle) overrides[String(s.n)] = v;
+    });
+    const res = await settingsHook.save({ infrabeat_text: ibText, title_overrides: overrides });
+    setSaving(false);
+    setMsg(res.ok ? "Saved — applies to everyone now." : (res.error || "Failed."));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="eyebrow mb-2" style={{ color: "var(--purple)" }}>InfraBeat Positioning Text</div>
+        <p className="mb-2 text-xs ink-faint">Used in sections 12–13 to describe InfraBeat's capabilities. Changes apply to all future reports.</p>
+        <textarea value={ibText} onChange={(e) => setIbText(e.target.value)} rows={6}
+          className="w-full rounded-lg border bg-transparent p-3 text-sm ink" style={{ borderColor: "var(--border)" }}
+          placeholder="InfraBeat Technologies is a…" />
+      </div>
+
+      <div>
+        <div className="eyebrow mb-2" style={{ color: "var(--purple)" }}>Section Titles</div>
+        <p className="mb-2 text-xs ink-faint">Rename any section. Blank/unchanged uses the default.</p>
+        <div className="space-y-2">
+          {(sections || []).map((s) => (
+            <div key={s.n} className="flex items-center gap-2">
+              <span className="font-mono w-6 text-xs ink-faint">{String(s.n).padStart(2, "0")}</span>
+              <input value={titles[s.n] || ""} onChange={(e) => setTitles((t) => ({ ...t, [s.n]: e.target.value }))}
+                className="flex-1 rounded-lg border bg-transparent px-3 py-1.5 text-sm ink" style={{ borderColor: "var(--border)" }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {msg && <div className="rounded-lg p-3 text-center text-sm" style={{ background: msg.startsWith("Saved") ? "var(--green-soft, var(--surface-2))" : "var(--red-soft)", color: msg.startsWith("Saved") ? "var(--green)" : "var(--red)" }}>{msg}</div>}
+      <button onClick={save} disabled={saving}
+        className="font-mono w-full rounded-lg px-6 py-3 text-sm font-semibold uppercase tracking-wide disabled:opacity-50"
+        style={{ background: "var(--purple)", color: "var(--bg)" }}>
+        {saving ? "Saving…" : "Save global config"}
+      </button>
     </div>
   );
 }

@@ -7,7 +7,9 @@ import { useHistory } from "./lib/useHistory.js";
 import { useGroqKey } from "./lib/useGroqKey.js";
 import { useUsage } from "./lib/useUsage.js";
 import { useRole } from "./lib/useRole.js";
+import { useSettings } from "./lib/useSettings.js";
 import AdminPanel from "./components/AdminPanel.jsx";
+import { INFRABEAT_LOGO } from "./lib/infrabeatLogo.js";
 import { supabase, isSupabaseConfigured } from "./lib/supabase.js";
 import Landing from "./components/Landing.jsx";
 import Generating from "./components/Generating.jsx";
@@ -26,6 +28,12 @@ export default function App() {
   const history = useHistory(auth.authed, { elevated: role.elevated, session: auth.session });
   const groq = useGroqKey(auth.user?.id);
   const usage = useUsage(auth.session, auth.authed);
+  const settings = useSettings(auth.session, auth.authed);
+
+  // Live getter for settings so useAgent applies overrides at generation time.
+  const settingsRef = useRef(settings.settings);
+  useEffect(() => { settingsRef.current = settings.settings; }, [settings.settings]);
+  const getSettings = useCallback(() => settingsRef.current, []);
 
   // Give the agent a live getter for the current Groq key (read at request time).
   const groqKeyRef = useRef(groq.groqKey);
@@ -41,7 +49,7 @@ export default function App() {
     blocks, current, phase, error,
     doneCount, usableCount, lastFailed, nextStepName, stepNames, allSections, totalSteps, effectiveTotal,
     start, next, runStep, finishHere, reset, restore, getBrief,
-  } = useAgent({ getGroqKey, getToken });
+  } = useAgent({ getGroqKey, getToken, getSettings });
   const [company, setCompany] = useState("");
   const [authModal, setAuthModal] = useState(null); // null | "login" | "signup"
   const [showHistory, setShowHistory] = useState(false);
@@ -123,14 +131,19 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-30 border-b backdrop-blur" style={{ background: "color-mix(in srgb, var(--bg) 80%, transparent)" }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <motion.span whileHover={{ rotate: -8, scale: 1.1 }} className="flex h-7 w-7 items-center justify-center rounded-md" style={{ background: "var(--teal)", color: "var(--bg)" }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></svg>
             </motion.span>
             <div className="leading-tight">
-              <div className="font-display text-sm font-bold ink">Intelligence</div>
+              <div className="font-display text-sm font-bold ink">Intelligence Hub</div>
               <div className="eyebrow" style={{ fontSize: "0.55rem" }}>Enterprise Tier</div>
             </div>
+            {/* InfraBeat ownership branding */}
+            <span className="ml-1 hidden items-center gap-1.5 border-l pl-3 sm:flex" style={{ borderColor: "var(--border)" }}>
+              <span className="text-[0.6rem] ink-faint">by</span>
+              <img src={INFRABEAT_LOGO} alt="InfraBeat" style={{ height: 16, width: "auto" }} />
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {active && (
@@ -289,7 +302,8 @@ export default function App() {
             )}
 
             {role.elevated && (
-              <AdminPanel open={showAdmin} onClose={() => setShowAdmin(false)} token={auth.session?.access_token} />
+              <AdminPanel open={showAdmin} onClose={() => setShowAdmin(false)} token={auth.session?.access_token}
+                sections={allSections} settingsHook={settings} />
             )}
           </AnimatePresence>
         </>
