@@ -303,7 +303,7 @@ export default function App() {
 
             {role.elevated && (
               <AdminPanel open={showAdmin} onClose={() => setShowAdmin(false)} token={auth.session?.access_token}
-                sections={allSections} settingsHook={settings} />
+                sections={allSections} settingsHook={settings} isAdmin={role.role === "admin"} />
             )}
           </AnimatePresence>
         </>

@@ -67,13 +67,30 @@ export function isElevated(role) {
   return ELEVATED.has(role);
 }
 
+// Admin is strictly above manager. Used to gate user-management actions.
+export function isAdmin(role) {
+  return role === ROLES.ADMIN;
+}
+
+// Per-role daily search limit: admin 10, manager 7, user 5 (env-overridable).
+export function limitForRole(role) {
+  if (role === ROLES.ADMIN) return parseInt(process.env.ADMIN_REPORT_LIMIT || "10", 10);
+  if (role === ROLES.MANAGER) return parseInt(process.env.MANAGER_REPORT_LIMIT || "7", 10);
+  return parseInt(process.env.DAILY_REPORT_LIMIT || "5", 10);
+}
+
 // Guard helper for endpoints: returns { ok, userId, role } after validating the
-// token. If requireElevated is true and the user isn't admin/manager, ok=false.
-export async function authorize(req, { requireElevated = false } = {}) {
+// token. Options:
+//   requireElevated → admin OR manager (shared privileges: analytics, all-reports, config)
+//   requireAdmin    → admin ONLY (user management)
+export async function authorize(req, { requireElevated = false, requireAdmin = false } = {}) {
   const token = (req.headers?.["authorization"] || "").replace(/^Bearer\s+/i, "");
   const userId = await getUserId(token);
   if (!userId) return { ok: false, reason: "unauthenticated", userId: null, role: null };
   const role = await getRoleForUser(userId);
+  if (requireAdmin && !isAdmin(role)) {
+    return { ok: false, reason: "forbidden", userId, role };
+  }
   if (requireElevated && !isElevated(role)) {
     return { ok: false, reason: "forbidden", userId, role };
   }

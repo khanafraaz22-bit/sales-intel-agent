@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   if (req.method !== "POST") { res.statusCode = 405; res.end(JSON.stringify({ error: "Method not allowed." })); return; }
 
-  const auth = await authorize(req, { requireElevated: true });
+  const auth = await authorize(req, { requireAdmin: true });
   if (!auth.ok) {
     res.statusCode = auth.reason === "unauthenticated" ? 401 : 403;
     res.end(JSON.stringify({ error: auth.reason === "unauthenticated" ? "Not authenticated." : "Forbidden." }));

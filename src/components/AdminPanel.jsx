@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // Hidden admin surface (only mounted for elevated users). Two tabs:
 // Users (list, change role, remove) and Analytics (aggregate stats). All data
 // comes from role-checked server endpoints; the UI is only the presentation.
-export default function AdminPanel({ open, onClose, token, sections = [], settingsHook = null }) {
+export default function AdminPanel({ open, onClose, token, sections = [], settingsHook = null, isAdmin = false }) {
   const [tab, setTab] = useState("users");
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export default function AdminPanel({ open, onClose, token, sections = [], settin
             </div>
 
             <div className="overflow-y-auto p-6">
-              {tab === "users" ? <UsersTab token={token} />
+              {tab === "users" ? <UsersTab token={token} isAdmin={isAdmin} />
                 : tab === "analytics" ? <AnalyticsTab token={token} />
                 : <ConfigTab sections={sections} settingsHook={settingsHook} />}
             </div>
@@ -58,7 +58,7 @@ export default function AdminPanel({ open, onClose, token, sections = [], settin
   );
 }
 
-function UsersTab({ token }) {
+function UsersTab({ token, isAdmin = false }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -121,31 +121,39 @@ function UsersTab({ token }) {
                 <div className="font-mono text-[11px] ink-faint">{u.report_count} reports · {u.searches_today} today</div>
               </div>
               <div className="flex items-center gap-2">
-                {/* role selector */}
-                <select value={u.role} disabled={busy === u.id}
-                  onChange={(e) => setRole(u.id, e.target.value)}
-                  className="font-mono rounded-lg border bg-transparent px-2 py-1 text-xs uppercase tracking-wide"
-                  style={{ borderColor: "var(--border)", color: roleColor }}>
-                  <option value="user">user</option>
-                  <option value="manager">manager</option>
-                  <option value="admin">admin</option>
-                </select>
-                {/* remove */}
-                {!u.is_self && (
-                  confirmRemove === u.id ? (
-                    <div className="flex gap-1">
-                      <button onClick={() => removeUser(u.id)} disabled={busy === u.id}
-                        className="font-mono rounded-lg px-2 py-1 text-[11px] uppercase text-white" style={{ background: "var(--red)" }}>
-                        {busy === u.id ? "…" : "Confirm"}
-                      </button>
-                      <button onClick={() => setConfirmRemove(null)}
-                        className="font-mono rounded-lg border px-2 py-1 text-[11px] uppercase ink-faint" style={{ borderColor: "var(--border)" }}>Cancel</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setConfirmRemove(u.id)}
-                      className="font-mono rounded-lg border px-2 py-1 text-[11px] uppercase tracking-wide transition hover:border-red hover:text-red ink-faint"
-                      style={{ borderColor: "var(--border)" }}>Remove</button>
-                  )
+                {isAdmin ? (
+                  <>
+                    {/* role selector (admin only) */}
+                    <select value={u.role} disabled={busy === u.id}
+                      onChange={(e) => setRole(u.id, e.target.value)}
+                      className="font-mono rounded-lg border bg-transparent px-2 py-1 text-xs uppercase tracking-wide"
+                      style={{ borderColor: "var(--border)", color: roleColor }}>
+                      <option value="user">user</option>
+                      <option value="manager">manager</option>
+                      <option value="admin">admin</option>
+                    </select>
+                    {/* remove (admin only) */}
+                    {!u.is_self && (
+                      confirmRemove === u.id ? (
+                        <div className="flex gap-1">
+                          <button onClick={() => removeUser(u.id)} disabled={busy === u.id}
+                            className="font-mono rounded-lg px-2 py-1 text-[11px] uppercase text-white" style={{ background: "var(--red)" }}>
+                            {busy === u.id ? "…" : "Confirm"}
+                          </button>
+                          <button onClick={() => setConfirmRemove(null)}
+                            className="font-mono rounded-lg border px-2 py-1 text-[11px] uppercase ink-faint" style={{ borderColor: "var(--border)" }}>Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmRemove(u.id)}
+                          className="font-mono rounded-lg border px-2 py-1 text-[11px] uppercase tracking-wide transition hover:border-red hover:text-red ink-faint"
+                          style={{ borderColor: "var(--border)" }}>Remove</button>
+                      )
+                    )}
+                  </>
+                ) : (
+                  // Manager view: role is read-only.
+                  <span className="font-mono rounded-lg border px-2 py-1 text-xs uppercase tracking-wide"
+                    style={{ borderColor: "var(--border)", color: roleColor }}>{u.role}</span>
                 )}
               </div>
             </div>

@@ -12,15 +12,9 @@
 // degradation pattern.
 
 import { createClient } from "@supabase/supabase-js";
-import { getRoleForUser, isElevated } from "./_role.js";
+import { getRoleForUser, limitForRole } from "./_role.js";
 
 const DAILY_LIMIT = parseInt(process.env.DAILY_REPORT_LIMIT || "5", 10);
-const ELEVATED_LIMIT = parseInt(process.env.ELEVATED_REPORT_LIMIT || "10", 10);
-
-// The daily limit for a given role: elevated (admin/manager) → 10, else 5.
-function limitForRole(role) {
-  return isElevated(role) ? ELEVATED_LIMIT : DAILY_LIMIT;
-}
 
 export function isLimitConfigured() {
   return Boolean(
