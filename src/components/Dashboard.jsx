@@ -13,6 +13,38 @@ const reveal = {
 };
 const stagger = { show: { transition: { staggerChildren: 0.08 } } };
 
+// Report-level provenance badge. HONEST signal: "Web-grounded" means a Brave
+// search brief was fetched and fed into generation; "Model knowledge" means the
+// report was built from the model's own knowledge (no live web grounding).
+// Not a confidence score.
+function GroundingBadge({ grounded }) {
+  const [hover, setHover] = useState(false);
+  const color = grounded ? "var(--teal)" : "#d97706";
+  const label = grounded ? "Web-grounded" : "Model knowledge";
+  const tip = grounded
+    ? "This report was grounded in live web search results (Brave), not just the model's memory."
+    : "No live web grounding was available, so this reflects the model's general knowledge. Verify key facts before acting on them.";
+  return (
+    <span className="relative inline-flex" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+        style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          {grounded
+            ? <><circle cx="12" cy="12" r="10" /><path d="M8 12l3 3 5-6" /></>
+            : <><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></>}
+        </svg>
+        {label}
+      </span>
+      {hover && (
+        <span className="absolute left-0 top-full z-20 mt-1.5 w-60 rounded-lg border p-2.5 text-[11px] leading-snug shadow-lg"
+          style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--ink-soft)" }}>
+          {tip}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Section({ id, eyebrow, title, accent, children }) {
   return (
     <motion.section
@@ -44,7 +76,7 @@ function extractPercents(bullets = []) {
 }
 
 export default function Dashboard({
-  blocks, company, onReset,
+  blocks, company, onReset, grounded = false,
   // Live-build props (optional — when present, the report shows progress + a
   // bottom control bar so it can be generated section-by-section in place):
   building = false,        // true while the run isn't finished
@@ -193,13 +225,12 @@ export default function Dashboard({
       {/* ─── OVERVIEW / HERO ─── */}
       {(
         <motion.section id="sec-1" variants={reveal} initial="hidden" animate="show">
-          {(heroFallback.industry || heroFallback.region || heroFallback.growth_stage) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {heroFallback.industry && <Pill color="var(--cyan)" soft="var(--surface-2)">{heroFallback.industry}</Pill>}
-              {heroFallback.region && <Pill color="var(--teal)" soft="var(--surface-2)">{heroFallback.region}</Pill>}
-              {heroFallback.growth_stage && <Pill color="var(--green)" soft="var(--green-soft)">● {heroFallback.growth_stage}</Pill>}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {heroFallback.industry && <Pill color="var(--cyan)" soft="var(--surface-2)">{heroFallback.industry}</Pill>}
+            {heroFallback.region && <Pill color="var(--teal)" soft="var(--surface-2)">{heroFallback.region}</Pill>}
+            {heroFallback.growth_stage && <Pill color="var(--green)" soft="var(--green-soft)">● {heroFallback.growth_stage}</Pill>}
+            <GroundingBadge grounded={grounded} />
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <CompanyLogo name={company || heroFallback.company_name} size={72} />
             <h1 className="font-display text-5xl font-bold ink sm:text-6xl">{heroFallback.company_name}</h1>

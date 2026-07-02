@@ -19,6 +19,15 @@ const BRAVE_WEB_URL = "https://api.search.brave.com/res/v1/web/search";
 // the 413 that bit us with compound. ~6000 chars ≈ ~1500 tokens of grounding.
 const MAX_CONTEXT_CHARS = 6000;
 
+// Lightweight diagnostics. Set BRAVE_DEBUG=1 to log Brave outcomes to the
+// server console so you can see WHY a search came back empty (bad key, plan
+// doesn't include the endpoint, rate limit, etc.) instead of a silent null.
+const BRAVE_DEBUG = String(process.env.BRAVE_DEBUG || "").trim() === "1";
+function braveLog(msg) { if (BRAVE_DEBUG) console.log(`[brave] ${msg}`); }
+async function safeErr(resp) {
+  try { const t = await resp.text(); return t.slice(0, 200); } catch { return "no body"; }
+}
+
 export function isBraveConfigured() {
   return Boolean((process.env.BRAVE_API_KEY || "").trim());
 }
@@ -35,7 +44,7 @@ function companyQuery(company, industry, region) {
 // Brave isn't configured or the call fails (caller then degrades gracefully).
 export async function braveCompanyBrief({ company, industry, region }) {
   const key = (process.env.BRAVE_API_KEY || "").trim();
-  if (!key) return null;
+  if (!key) { braveLog("no BRAVE_API_KEY set"); return null; }
 
   const q = companyQuery(company, industry, region);
 
@@ -54,10 +63,13 @@ export async function braveCompanyBrief({ company, industry, region }) {
       const data = await resp.json();
       const text = extractContextText(data);
       if (text) return trim(text);
+      braveLog("LLM-context OK but empty; falling back to web search");
+    } else {
+      braveLog(`LLM-context HTTP ${resp.status} (${await safeErr(resp)}); falling back to web search`);
     }
     // If LLM Context isn't available on the plan, fall through to web search.
-  } catch {
-    /* fall through to web search */
+  } catch (e) {
+    braveLog(`LLM-context threw: ${e.message}; falling back to web search`);
   }
 
   // Fallback: classic Web Search → assemble snippets into a brief.
@@ -72,10 +84,11 @@ export async function braveCompanyBrief({ company, industry, region }) {
         "X-Subscription-Token": key,
       },
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) { braveLog(`web-search HTTP ${resp.status} (${await safeErr(resp)})`); return null; }
     const data = await resp.json();
     const results = data?.web?.results || [];
-    if (!results.length) return null;
+    if (!results.length) { braveLog("web-search OK but 0 results"); return null; }
+    braveLog(`web-search OK: ${results.length} results`);
     const brief = results
       .slice(0, 8)
       .map((r) => {
@@ -85,7 +98,8 @@ export async function braveCompanyBrief({ company, industry, region }) {
       })
       .join("\n");
     return trim(brief);
-  } catch {
+  } catch (e) {
+    braveLog(`web-search threw: ${e.message}`);
     return null;
   }
 }
@@ -152,11 +166,27 @@ function parseLinkedInResult(r) {
   return { name: name.trim(), title: (title || "").trim(), url: url.split("?")[0] };
 }
 
-export async function braveLinkedInProfiles({ company }) {
+export async function braveLinkedInProfiles({ company, region }) {
   const key = (process.env.BRAVE_API_KEY || "").trim();
   if (!key || !company) return [];
 
-  const q = `${company} (CEO OR Founder OR CFO OR CTO OR COO OR President OR "Managing Director") site:linkedin.com/in`;
+  // Include location when provided, to disambiguate companies with common names.
+  const loc = (region && region !== "Global") ? ` ${region}` : "";
+  const q = `"${company}"${loc} (CEO OR Founder OR CFO OR CTO OR COO OR President OR "Managing Director") site:linkedin.com/in`;
+
+  // Normalized company tokens, used to verify a profile actually references the
+  // Company matching is a LIGHT preference, not a hard gate. Brave's query is
+  // already scoped to the company, so results are relevant; we only use this to
+  // PREFER profiles that clearly reference the company — but if none do, we
+  // still return the valid profiles rather than dropping everything.
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); // collapse spaces/punct
+  const companyNorm = norm(company);                 // "infrabeat"
+  const companyWords = String(company).toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter((w) => w.length > 2);
+  const mentionsCompany = (r) => {
+    const hay = norm(`${r.title || ""} ${r.description || ""} ${r.url || ""}`);
+    if (companyNorm && hay.includes(companyNorm)) return true;         // "infrabeat" as one blob
+    return companyWords.some((w) => hay.includes(w));                  // or any distinctive word
+  };
 
   try {
     const url = new URL(BRAVE_WEB_URL);
@@ -165,26 +195,31 @@ export async function braveLinkedInProfiles({ company }) {
     const resp = await fetch(url, {
       headers: { Accept: "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": key },
     });
-    if (!resp.ok) return [];
+    if (!resp.ok) { braveLog(`linkedin HTTP ${resp.status} (${await safeErr(resp)})`); return []; }
     const data = await resp.json();
     const results = data?.web?.results || [];
+    braveLog(`linkedin: ${results.length} raw results for "${company}"`);
 
     const seen = new Set();
-    const profiles = [];
+    const matched = [];
     for (const r of results) {
       const p = parseLinkedInResult(r);
       if (!p) continue;
       const dedupKey = p.url.toLowerCase();
       if (seen.has(dedupKey)) continue;
-      // Keep only profiles that look like genuine decision-makers, OR keep
-      // anyway if we matched a /in/ profile for this company search.
       seen.add(dedupKey);
-      profiles.push(p);
-      if (profiles.length >= 6) break;
+      if (mentionsCompany(r)) matched.push(p);
     }
-    return profiles;
-  } catch {
+
+    // Only return profiles that genuinely reference the company. If none do
+    // (common for smaller/less-indexed companies), return NOTHING — the UI
+    // shows an honest "no profiles found" message. We never pad with unrelated
+    // people, which would be worse than an empty section.
+    const chosen = matched.slice(0, 6);
+    braveLog(`linkedin: ${matched.length} matched company → returning ${chosen.length}`);
+    return chosen;
+  } catch (e) {
+    braveLog(`linkedin threw: ${e.message}`);
     return [];
   }
 }
-

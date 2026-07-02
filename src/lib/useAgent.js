@@ -112,6 +112,9 @@ export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
   const [current, setCurrent] = useState(null); // the step currently streaming
   const [phase, setPhase] = useState("idle");   // idle | running | waiting | done | error
   const [error, setError] = useState(null);
+  // Whether this report is web-grounded (a Brave brief was fetched/used) vs.
+  // built from model knowledge alone. Honest provenance signal for the UI.
+  const [grounded, setGrounded] = useState(false);
 
   const companyMetaRef = useRef({ company: "", industry: "Unknown", region: "Global" });
   const briefRef = useRef(null);                 // section-1 research brief (reused 2..11)
@@ -243,9 +246,12 @@ export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
     if (stallTimer) clearTimeout(stallTimer);
 
     // Capture the section-1 research brief so sections 2..11 reuse it (the
-    // backend then skips the search stage entirely).
+    // backend then skips the search stage entirely). The presence of a brief
+    // is our honest signal that this report is WEB-GROUNDED (Brave provided
+    // real context) vs. built from the model's own knowledge.
     if (parsed && parsed.brief && !briefRef.current) {
       briefRef.current = parsed.brief;
+      setGrounded(true);
     }
 
     if (parsed && parsed.blockData) {
@@ -311,6 +317,7 @@ export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
         : null;
       parseRetryRef.current = 0;
       briefRef.current = null; // fresh company → fresh search on the first section
+      setGrounded(false);
       setBlocks([]);
       setCurrent(null);
       setError(null);
@@ -354,6 +361,7 @@ export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
   const reset = useCallback(() => {
     companyMetaRef.current = { company: "", industry: "Unknown", region: "Global" };
     briefRef.current = null;
+    setGrounded(false);
     stepRef.current = 0;
     parseRetryRef.current = 0;
     selectedRef.current = null;
@@ -374,6 +382,7 @@ export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
     // does NOT trigger another Brave search. Falls back to re-searching only
     // when no brief was stored (older entries).
     briefRef.current = (typeof brief === "string" && brief.trim()) ? brief.trim() : null;
+    setGrounded(Boolean(briefRef.current));
     setBlocks(arr);
     setCurrent(null);
     setError(null);
@@ -421,7 +430,7 @@ export function useAgent({ getGroqKey, getToken, getSettings } = {}) {
   const getBrief = useCallback(() => briefRef.current || null, []);
 
   return {
-    blocks, current, phase, error,
+    blocks, current, phase, error, grounded,
     doneCount, usableCount, lastFailed, nextStepNumber, nextStepName, stepNames, allSections, totalSteps: STEP_SPECS.length,
     effectiveTotal,
     start, next, runStep, finishHere, reset, restore, getBrief,

@@ -15,6 +15,7 @@ const TITLE = ["Strategic", "Intelligence", "Hub"];
 
 export default function Landing({ onStart, disabled, lockInteractive = false, greetingName = null, allSections = [] }) {
   const [company, setCompany] = useState("");
+  const [location, setLocation] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   // null = all sections; otherwise a Set of selected section numbers.
   const [selected, setSelected] = useState(null);
@@ -37,7 +38,7 @@ export default function Landing({ onStart, disabled, lockInteractive = false, gr
   const run = () => {
     if (!canStart || disabled) return;
     const selectedSteps = isAll ? undefined : [...selected].sort((a, b) => a - b);
-    onStart({ company: company.trim(), industry: "Unknown", region: "Global", selectedSteps });
+    onStart({ company: company.trim(), industry: "Unknown", region: location.trim() || "Global", selectedSteps });
   };
   const pick = (t) => setCompany(t.company);
 
@@ -93,6 +94,21 @@ export default function Landing({ onStart, disabled, lockInteractive = false, gr
           style={{ background: "var(--teal)", color: "var(--bg)" }}>
           {disabled ? "Working" : "Generate"}
         </motion.button>
+      </motion.div>
+
+      {/* Optional location — helps disambiguate companies with common names */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+        className="mx-auto mt-3 flex max-w-md items-center gap-2 rounded-full border px-4 py-2"
+        style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--surface) 60%, transparent)" }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 ink-faint">
+          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" />
+        </svg>
+        <input value={location} onChange={(e) => setLocation(e.target.value)} onKeyDown={(e) => e.key === "Enter" && run()}
+          placeholder="Location (optional) — e.g. Pune, India"
+          className="flex-1 bg-transparent text-sm outline-none ink placeholder:text-ink-faint" />
+        {location && (
+          <button onClick={() => setLocation("")} className="text-xs ink-faint hover:text-teal" title="Clear location">✕</button>
+        )}
       </motion.div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}

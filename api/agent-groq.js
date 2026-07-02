@@ -24,6 +24,11 @@
 import { braveCompanyBrief, braveLinkedInProfiles, isBraveConfigured } from "./_brave.js";
 import { getUserId, checkLimit, commitUsage, isLimitConfigured } from "./_limit.js";
 
+// Diagnostics for the daily-limit path. Set LIMIT_DEBUG=1 to see why usage did
+// or didn't commit (table missing, auth, etc.) instead of a silent swallow.
+const LIMIT_DEBUG = String(process.env.LIMIT_DEBUG || "").trim() === "1";
+function limitLog(msg) { if (LIMIT_DEBUG) console.log(`[limit] ${msg}`); }
+
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 const FORMAT_MODEL = "llama-3.3-70b-versatile"; // JSON mode (json_object)
@@ -202,7 +207,14 @@ export default async function handler(req, res) {
     // Commit one unit ONLY when a fresh Brave search actually succeeded.
     // (Failed/empty searches don't consume the user's daily quota.)
     if (briefIsNew && limitUserId) {
-      try { await commitUsage(limitUserId); } catch { /* non-fatal */ }
+      try {
+        const result = await commitUsage(limitUserId);
+        limitLog(`committed usage for ${limitUserId}: used=${result?.used} limit=${result?.limit}`);
+      } catch (e) {
+        limitLog(`commitUsage THREW: ${e.message}`);
+      }
+    } else {
+      limitLog(`no commit: briefIsNew=${briefIsNew} limitUserId=${limitUserId ? "set" : "null"} willSearch=${willSearch}`);
     }
 
     // ── DECISION_MAKERS: real LinkedIn profiles, NOT model-generated. ──
@@ -213,7 +225,7 @@ export default async function handler(req, res) {
       let people = [];
       if (isBraveConfigured()) {
         res.write(SEARCH_SENTINEL); // UI shows "Searching the web…"
-        try { people = await braveLinkedInProfiles({ company }); } catch { people = []; }
+        try { people = await braveLinkedInProfiles({ company, region }); } catch { people = []; }
       }
       const status = isLast ? "DONE" : "CONTINUE";
       const json = JSON.stringify({ people });

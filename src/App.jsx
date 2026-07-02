@@ -46,7 +46,7 @@ export default function App() {
   const getToken = useCallback(() => tokenRef.current, []);
 
   const {
-    blocks, current, phase, error,
+    blocks, current, phase, error, grounded,
     doneCount, usableCount, lastFailed, nextStepName, stepNames, allSections, totalSteps, effectiveTotal,
     start, next, runStep, finishHere, reset, restore, getBrief,
   } = useAgent({ getGroqKey, getToken, getSettings });
@@ -272,6 +272,7 @@ export default function App() {
               <motion.div key="dash" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 80, damping: 18 }}>
                 <Dashboard
                   blocks={blocks}
+                  grounded={grounded}
                   company={company}
                   onReset={() => saveThenRun(reset)}
                   building={!done}

@@ -90,9 +90,14 @@ export async function commitUsage(userId) {
   const current = existing && existing.length ? existing[0].count : 0;
   const next = current + 1;
 
-  await admin
+  const { error: upsertError } = await admin
     .from("usage")
     .upsert({ user_id: userId, day, count: next }, { onConflict: "user_id,day" });
+  if (upsertError) {
+    // Surface it so the caller's logging can show WHY the limit didn't move
+    // (e.g. missing table, missing unique constraint on (user_id, day)).
+    throw new Error(`usage upsert failed: ${upsertError.message || upsertError.code || "unknown"}`);
+  }
 
   return { used: next, limit, remaining: Math.max(0, limit - next), role };
 }
